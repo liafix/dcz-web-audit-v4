@@ -1,0 +1,71 @@
+'use client';
+
+import { useCallback, useState, type FormEvent } from 'react';
+import { TurnstileWidget } from '@/components/forms/turnstile-widget';
+import { Button } from '@/components/ui/button';
+import { Input, Textarea } from '@/components/ui/input';
+
+export function ManualReviewForm({ token }: { token: string }) {
+  const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const onTurnstileToken = useCallback((value: string | null) => setTurnstileToken(value), []);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    if (siteKey && !turnstileToken) {
+      setError('Dokončite bezpečnostné overenie.');
+      return;
+    }
+    const form = new FormData(event.currentTarget);
+    setPending(true);
+    try {
+      const response = await fetch(`/api/audit/${encodeURIComponent(token)}/manual-review`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: form.get('email'),
+          name: form.get('name'),
+          company: form.get('company'),
+          phone: form.get('phone'),
+          message: form.get('message'),
+          turnstileToken,
+        }),
+      });
+      const data = (await response.json()) as { error?: string; errorId?: string };
+      if (!response.ok) throw new Error(`${data.error ?? 'Žiadosť sa nepodarilo odoslať.'}${data.errorId ? ` ID: ${data.errorId}` : ''}`);
+      setSuccess(true);
+      setPending(false);
+    } catch (submissionError) {
+      setError(submissionError instanceof Error ? submissionError.message : 'Žiadosť sa nepodarilo odoslať.');
+      setPending(false);
+    }
+  }
+
+  if (success) {
+    return (
+      <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/8 p-6">
+        <h2 className="text-xl font-semibold text-white">Žiadosť sme prijali</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-300">DCZ dostalo kontext, správu aj prioritné zistenia z auditu. Odpoveď zvyčajne posielame počas najbližších pracovných dní; nejde o garantovanú lehotu. Pri urgentnej požiadavke napíšte na info@dcz.sk.</p>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4" noValidate>
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className="space-y-2 text-sm text-slate-300"><span>Meno *</span><Input required name="name" autoComplete="name" /></label>
+        <label className="space-y-2 text-sm text-slate-300"><span>E-mail *</span><Input required type="email" name="email" autoComplete="email" /></label>
+        <label className="space-y-2 text-sm text-slate-300"><span>Firma</span><Input name="company" autoComplete="organization" /></label>
+        <label className="space-y-2 text-sm text-slate-300"><span>Telefón</span><Input name="phone" autoComplete="tel" /></label>
+      </div>
+      <label className="space-y-2 text-sm text-slate-300"><span>Čo potrebujete vyriešiť? *</span><Textarea required name="message" placeholder="Napíšte cieľ, problém alebo termín projektu." /></label>
+      <TurnstileWidget siteKey={siteKey} onToken={onTurnstileToken} />
+      <Button type="submit" disabled={pending} className="w-full">{pending ? 'Odosielame…' : 'Požiadať o manuálnu kontrolu'}</Button>
+      {error && <p role="alert" className="rounded-xl border border-red-400/25 bg-red-400/8 px-4 py-3 text-sm text-red-200">{error}</p>}
+    </form>
+  );
+}

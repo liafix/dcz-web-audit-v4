@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_PREVENT_INDEXING: 'true'
+      TURNSTILE_ENABLED: 'false'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Pin npm
+        run: npm install --global npm@10.9.4
+      - name: Validate lockfile
+        run: node scripts/verify-lockfile.mjs
+      - name: Install dependencies
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify workspace source
+        run: npm run verify:workspace
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm run test
+      - name: Production build
+        run: npm run build

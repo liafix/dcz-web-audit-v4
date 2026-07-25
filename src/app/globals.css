@@ -1,0 +1,193 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --surface: 8 11 20;
+  --surface-elevated: 17 24 42;
+  --border-soft: 148 163 184;
+  --brand-blue: 79 140 255;
+  --brand-violet: 155 109 255;
+  --brand-cyan: 83 216 255;
+}
+
+* {
+  border-color: rgb(var(--border-soft) / 0.16);
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 12% -10%, rgb(var(--brand-blue) / 0.16), transparent 32rem),
+    radial-gradient(circle at 88% 5%, rgb(var(--brand-violet) / 0.12), transparent 28rem),
+    #080b14;
+  color: #e2e8f0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+::selection {
+  background: rgb(var(--brand-blue) / 0.35);
+  color: white;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.focus-ring {
+  outline: none;
+}
+
+.focus-ring:focus-visible {
+  box-shadow: 0 0 0 2px #60a5fa, 0 0 0 4px #080b14;
+}
+
+.surface-panel {
+  background: linear-gradient(180deg, rgb(23 32 54 / 0.84), rgb(13 18 32 / 0.92));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.045), 0 30px 80px rgb(0 0 0 / 0.24);
+}
+
+.grid-fade {
+  background-image:
+    linear-gradient(rgb(148 163 184 / 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(148 163 184 / 0.045) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to bottom, black, transparent 85%);
+}
+
+.text-gradient {
+  background: linear-gradient(120deg, #ffffff 10%, #bcd4ff 48%, #c9b5ff 88%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.score-ring {
+  background: conic-gradient(var(--ring-color) calc(var(--score) * 1%), rgb(51 65 85 / 0.48) 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+a,
+button,
+summary,
+label[for],
+select {
+  cursor: pointer;
+}
+
+button,
+a,
+input,
+textarea,
+select,
+summary {
+  transition-property: color, background-color, border-color, opacity, transform, box-shadow, filter;
+  transition-duration: 200ms;
+  transition-timing-function: ease-out;
+}
+
+.eyebrow {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #93c5fd;
+}
+
+.section-title {
+  margin-top: 0.75rem;
+  max-width: 52rem;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.08;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  color: white;
+}
+
+.trust-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.07);
+  background: rgb(255 255 255 / 0.025);
+  padding: 0.45rem 0.75rem;
+}
+
+.trust-chip::before {
+  content: "";
+  width: 0.36rem;
+  height: 0.36rem;
+  border-radius: 999px;
+  background: #6ee7b7;
+  box-shadow: 0 0 0 4px rgb(110 231 183 / 0.08);
+}
+
+.sample-badge {
+  display: inline-flex;
+  min-height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.035);
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  color: #cbd5e1;
+}
+
+.sample-badge.observed {
+  border-color: rgb(110 231 183 / 0.2);
+  background: rgb(52 211 153 / 0.08);
+  color: #d1fae5;
+}
+
+@media (max-width: 374px) {
+  .section-title {
+    font-size: 1.8rem;
+  }
+}
+
+.sample-badge.not-detected {
+  border-color: rgb(251 191 36 / 0.2);
+  background: rgb(245 158 11 / 0.08);
+  color: #fef3c7;
+}
+
+.report-nav-link {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  border-radius: 0.75rem;
+  padding: 0.55rem 0.9rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: #94a3b8;
+}
+
+.report-nav-link:hover,
+.report-nav-link:focus-visible {
+  background: rgb(255 255 255 / 0.06);
+  color: white;
+}

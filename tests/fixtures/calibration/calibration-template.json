@@ -1,0 +1,29 @@
+{
+  "id": "sample-001",
+  "url": "https://example.com",
+  "vertical": "unknown",
+  "businessModel": "unknown",
+  "testedAt": "YYYY-MM-DD",
+  "overallScore": null,
+  "coverage": null,
+  "confidence": null,
+  "manualReviewer": "",
+  "findings": [
+    {
+      "ruleId": "",
+      "automatedResult": "unknown",
+      "manuallyConfirmed": false,
+      "falsePositive": false,
+      "falseNegative": false,
+      "severityCorrect": false,
+      "recommendationUseful": false,
+      "notes": ""
+    }
+  ],
+  "summary": {
+    "criticalFalsePositives": 0,
+    "criticalFalseNegatives": 0,
+    "approvedForCalibration": false,
+    "notes": ""
+  }
+}

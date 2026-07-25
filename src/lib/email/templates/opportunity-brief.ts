@@ -1,0 +1,7 @@
+function escapeHtml(value: string): string {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+}
+
+export function opportunityBriefEmail(input: { origin: string; briefUrl: string; bookingUrl: string }): string {
+  return `<!doctype html><html lang="sk"><body style="margin:0;background:#080b14;color:#e2e8f0;font-family:Arial,sans-serif"><div style="max-width:640px;margin:0 auto;padding:32px 20px"><p style="color:#93c5fd;font-size:12px;text-transform:uppercase;letter-spacing:.14em">DCZ Revenue Diagnostic</p><h1 style="font-size:28px;color:#fff">Opportunity Brief pre ${escapeHtml(input.origin)}</h1><p style="line-height:1.7;color:#cbd5e1">Pripravili sme stručné zhrnutie najväčších obchodných bariér, modelových ROI scenárov a odporúčaného ďalšieho kroku.</p><p><a href="${escapeHtml(input.briefUrl)}" style="display:inline-block;padding:14px 20px;border-radius:10px;background:#4f8cff;color:white;text-decoration:none;font-weight:700">Otvoriť Opportunity Brief</a></p><p style="margin-top:24px"><a href="${escapeHtml(input.bookingUrl)}" style="color:#c4b5fd">Rezervovať 20-minútovú diagnostiku výsledku →</a></p><p style="margin-top:32px;color:#64748b;font-size:12px;line-height:1.6">Brief je predbežný rozhodovací podklad založený na verejných signáloch a údajoch, ktoré ste zadali. Nejde o garanciu výsledku.</p></div></body></html>`;
+}
