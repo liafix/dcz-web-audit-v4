@@ -1,8 +1,7 @@
-import 'server-only';
-import { randomUUID } from 'node:crypto';
+﻿import 'server-only';
 
 export function correlationId(prefix = 'ERR'): string {
-  return `${prefix}-${randomUUID().slice(0, 8).toUpperCase()}`;
+  return `${prefix}-${globalThis.crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 }
 
 const SENSITIVE_KEY = /token|password|secret|authorization|cookie|html|body|email|phone|ip|query/i;
@@ -81,3 +80,6 @@ export async function logApplicationEvent(input: {
     // Logging must never fail the business flow.
   }
 }
+
+
+
