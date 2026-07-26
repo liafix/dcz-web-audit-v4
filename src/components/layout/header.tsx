@@ -8,7 +8,7 @@ export function Header() {
     <header className="premium-site-header">
       <div className="premium-site-header__panel">
         <Link className="focus-ring rounded-xl" href="/" aria-label="DCZ WebAudit – domov">
-          <BrandMark priority decorative />
+          <BrandMark variant="header" priority decorative />
         </Link>
         <nav className="premium-site-header__nav" aria-label="Hlavná navigácia">
           {links.map(([label, href]) => (

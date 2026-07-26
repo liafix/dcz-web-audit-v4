@@ -12,7 +12,7 @@ export default async function AdminLoginPage() {
     <main className="grid min-h-screen place-items-center px-5 py-12">
       <Card className="w-full max-w-md">
         <CardContent className="p-7">
-          <BrandMark />
+          <BrandMark variant="admin" />
           <h1 className="mt-8 text-2xl font-semibold text-white">Interná administrácia</h1>
           <p className="mt-2 text-sm leading-6 text-slate-400">Prístup je určený iba pre správcu DCZ WebAudit.</p>
           <div className="mt-7"><AdminLoginForm /></div>

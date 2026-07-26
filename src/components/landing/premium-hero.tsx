@@ -11,8 +11,8 @@ export function PremiumHero() {
             DCZ Revenue Diagnostic · evidence pred tvrdeniami
           </div>
           <h1 id="premium-hero-title" className="premium-hero__title premium-hero-enter premium-hero-enter--title">
-            Zistite, kde váš web
-            <span>môže strácať peniaze.</span>
+            Zistite, prečo váš web
+            <span>nezarába peniaze.</span>
           </h1>
           <p className="premium-hero__copy premium-hero-enter premium-hero-enter--copy">
             Preveríme verejné signály titulnej stránky, odhalíme najväčšie obchodné bariéry a ukážeme vám, čo má zmysel opraviť ako prvé.

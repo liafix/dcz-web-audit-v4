@@ -11,7 +11,9 @@ export default async function ProtectedAdminLayout({ children }: { children: Rea
     <div className="min-h-screen bg-[#080b14]">
       <header className="border-b border-white/8 bg-[#0d1220]">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-5 py-4 lg:px-8">
-          <Link href="/admin"><BrandMark /></Link>
+          <Link className="focus-ring rounded-xl" href="/admin" aria-label="DCZ WebAudit administrácia">
+            <BrandMark variant="compact" decorative />
+          </Link>
           <nav className="flex items-center gap-2">
             <Link className={buttonClass('ghost')} href="/admin">Dashboard</Link>
             <form action="/api/admin/logout" method="post"><button className={buttonClass('secondary')} type="submit">Odhlásiť</button></form>

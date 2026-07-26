@@ -192,25 +192,37 @@ summary {
   color: white;
 }
 
-/* Premium public header and landing hero. Keep these selectors isolated from reports and admin UI. */
+/* Premium public header, footer and landing hero. Keep these selectors isolated from reports and admin UI. */
 .premium-site-header,
+.premium-site-footer,
 .premium-hero-stage {
   font-family: var(--font-dcz-geist), Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-.brand-lockup {
+.brand-mark {
   display: inline-flex;
-  width: 205px;
   max-width: 100%;
+  flex: 0 0 auto;
   align-items: center;
 }
 
-.brand-lockup--compact {
-  width: 48px;
-  overflow: hidden;
+.brand-mark--header {
+  width: 250px;
 }
 
-.brand-lockup__image {
+.brand-mark--footer {
+  width: 286px;
+}
+
+.brand-mark--admin {
+  width: 210px;
+}
+
+.brand-mark--compact {
+  width: 46px;
+}
+
+.brand-mark__image {
   display: block;
   width: 100%;
   height: auto;
@@ -225,22 +237,21 @@ summary {
 
 .premium-site-header__panel {
   display: flex;
-  min-height: 76px;
+  min-height: 82px;
   max-width: 1280px;
   margin-inline: auto;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  border: 1px solid rgb(147 171 255 / 0.2);
+  border: 1px solid rgb(147 171 255 / 0.28);
   border-radius: 24px;
-  background: linear-gradient(135deg, rgb(9 15 32 / 0.9), rgb(8 13 29 / 0.78));
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 18px 60px rgb(0 0 0 / 0.32);
-  padding: 10px 14px 10px 18px;
-  backdrop-filter: blur(20px);
-}
-
-.premium-site-header .brand-lockup {
-  width: 220px;
+  background:
+    radial-gradient(circle at 8% 0%, rgb(48 119 255 / 0.11), transparent 30%),
+    radial-gradient(circle at 100% 50%, rgb(168 63 240 / 0.1), transparent 32%),
+    linear-gradient(135deg, rgb(9 15 32 / 0.94), rgb(8 13 29 / 0.82));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 18px 60px rgb(0 0 0 / 0.36);
+  padding: 11px 15px 11px 20px;
+  backdrop-filter: blur(22px);
 }
 
 .premium-site-header__nav {
@@ -376,6 +387,120 @@ summary {
 
 .premium-site-header__mobile-cta {
   margin-top: 5px;
+}
+
+.premium-site-footer {
+  position: relative;
+  overflow: hidden;
+  margin-top: 96px;
+  border-top: 1px solid rgb(147 171 255 / 0.14);
+  background:
+    radial-gradient(circle at 12% 18%, rgb(36 120 255 / 0.09), transparent 32%),
+    radial-gradient(circle at 92% 8%, rgb(168 63 240 / 0.08), transparent 30%),
+    linear-gradient(180deg, rgb(6 11 25 / 0.3), rgb(4 8 20 / 0.82));
+}
+
+.premium-site-footer__panel {
+  display: grid;
+  max-width: 1280px;
+  margin-inline: auto;
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
+  gap: clamp(48px, 7vw, 96px);
+  align-items: start;
+  padding: 64px 24px 70px;
+}
+
+.premium-site-footer__description {
+  max-width: 680px;
+  margin-top: 24px;
+  color: #91a0bd;
+  font-size: 0.9375rem;
+  line-height: 1.8;
+}
+
+.premium-site-footer__company {
+  display: flex;
+  max-width: 720px;
+  gap: 16px;
+  align-items: flex-start;
+  margin-top: 30px;
+  border-top: 1px solid rgb(148 163 184 / 0.14);
+  padding-top: 24px;
+  color: #9aa9c7;
+}
+
+.premium-site-footer__company-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  border: 1px solid rgb(92 123 255 / 0.24);
+  border-radius: 12px;
+  background: rgb(55 91 255 / 0.08);
+  color: #6285ff;
+}
+
+.premium-site-footer__company-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.premium-site-footer__company address {
+  display: grid;
+  gap: 3px;
+  font-size: 0.875rem;
+  font-style: normal;
+  line-height: 1.65;
+}
+
+.premium-site-footer__company a {
+  color: #9aa8ff;
+  transition: color 160ms ease-out;
+}
+
+.premium-site-footer__company a:hover,
+.premium-site-footer__company a:focus-visible {
+  color: white;
+}
+
+.premium-site-footer__nav {
+  display: grid;
+  border-top: 1px solid rgb(148 163 184 / 0.14);
+}
+
+.premium-site-footer__link {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid rgb(148 163 184 / 0.14);
+  border-radius: 8px;
+  padding: 0 4px 0 14px;
+  color: #d8deec;
+  font-size: 0.9375rem;
+  font-weight: 560;
+  transition: background-color 160ms ease-out, color 160ms ease-out, padding 160ms ease-out;
+}
+
+.premium-site-footer__link svg {
+  width: 18px;
+  height: 18px;
+  color: #8b5cf6;
+  transition: transform 160ms ease-out;
+}
+
+.premium-site-footer__link:hover,
+.premium-site-footer__link:focus-visible {
+  background: rgb(255 255 255 / 0.035);
+  color: white;
+  padding-inline: 18px 8px;
+}
+
+.premium-site-footer__link:hover svg,
+.premium-site-footer__link:focus-visible svg {
+  transform: translateX(2px);
 }
 
 .premium-hero-stage {
@@ -720,13 +845,13 @@ summary {
   }
 
   .premium-site-header__panel {
-    min-height: 64px;
+    min-height: 68px;
     border-radius: 19px;
     padding: 8px 9px 8px 13px;
   }
 
-  .premium-site-header .brand-lockup {
-    width: 166px;
+  .brand-mark--header {
+    width: 181px;
   }
 
   .premium-site-header__nav {
@@ -739,6 +864,29 @@ summary {
 
   .premium-site-header__cta {
     display: none;
+  }
+
+  .brand-mark--footer {
+    width: 248px;
+  }
+
+  .premium-site-footer {
+    margin-top: 72px;
+  }
+
+  .premium-site-footer__panel {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 42px;
+    padding: 48px 20px 54px;
+  }
+
+  .premium-site-footer__description {
+    margin-top: 20px;
+  }
+
+  .premium-site-footer__company {
+    margin-top: 24px;
+    padding-top: 20px;
   }
 
   .premium-hero-stage {
@@ -837,8 +985,8 @@ summary {
     min-height: 140px;
   }
 
-  .premium-site-header .brand-lockup {
-    width: 156px;
+  .brand-mark--header {
+    width: 160px;
   }
 
   .premium-hero {
