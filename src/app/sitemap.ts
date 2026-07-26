@@ -1,18 +1,24 @@
 import type { MetadataRoute } from 'next';
-import { CASE_STUDIES } from '@/content/case-studies';
-import { appUrl } from '@/lib/env';
+import { canonicalUrl, isIndexingPrevented } from '@/lib/seo/config';
+
+export const PRODUCTION_SITEMAP_PATHS = [
+  '/',
+  '/methodology',
+  '/privacy',
+  '/contact',
+] as const;
+
+export function buildSitemap(environment: NodeJS.ProcessEnv = process.env): MetadataRoute.Sitemap {
+  if (isIndexingPrevented(environment)) return [];
+
+  return [
+    { url: canonicalUrl('/') },
+    { url: canonicalUrl('/methodology'), lastModified: new Date('2026-07-26T00:00:00.000Z') },
+    { url: canonicalUrl('/privacy'), lastModified: new Date('2026-07-25T00:00:00.000Z') },
+    { url: canonicalUrl('/contact') },
+  ];
+}
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const base = appUrl();
-  return [
-    { url: base, changeFrequency: 'weekly', priority: 1 },
-    { url: `${base}/methodology`, changeFrequency: 'monthly', priority: 0.8 },
-    { url: `${base}/privacy`, changeFrequency: 'yearly', priority: 0.4 },
-    { url: `${base}/contact`, changeFrequency: 'monthly', priority: 0.7 },
-    ...CASE_STUDIES.map((study) => ({
-      url: `${base}/case-studies/${study.slug}`,
-      changeFrequency: 'monthly' as const,
-      priority: study.proofType === 'verified_client_result' || study.proofType === 'delivered_project' ? 0.75 : 0.55,
-    })),
-  ];
+  return buildSitemap();
 }

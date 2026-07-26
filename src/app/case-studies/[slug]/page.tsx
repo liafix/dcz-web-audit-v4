@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { CASE_STUDIES } from '@/content/case-studies';
 import { PublicShell } from '@/components/layout/public-shell';
@@ -8,8 +9,20 @@ import { hasReportAccess } from '@/lib/auth/report-access';
 import { findVerifiedLeadForAudit } from '@/lib/db/revenue-queries';
 import { recalculateAndRouteLead } from '@/lib/leads/routing';
 import type { ProofType } from '@/lib/revenue/types';
+import { buildPublicMetadata, CASE_STUDY_SEO } from '@/lib/seo/metadata';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const seo = CASE_STUDY_SEO[slug];
+  if (!seo) return { robots: { index: false, follow: false, nocache: true } };
+  return buildPublicMetadata(seo);
+}
 
 const proofLabel: Record<ProofType, string> = {
   verified_client_result: 'Overený klientsky výsledok',

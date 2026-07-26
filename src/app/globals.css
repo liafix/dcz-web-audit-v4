@@ -52,6 +52,59 @@ select {
   box-shadow: 0 0 0 2px #60a5fa, 0 0 0 4px #080b14;
 }
 
+.public-skip-link {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 100;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 10px 14px;
+  color: #0f172a;
+  font-size: 0.875rem;
+  font-weight: 700;
+  transform: translateY(-160%);
+}
+
+.public-skip-link:focus {
+  transform: translateY(0);
+}
+
+.public-breadcrumbs {
+  color: #7f8da8;
+  font-size: 0.8125rem;
+}
+
+.public-breadcrumbs ol,
+.public-breadcrumbs li {
+  display: flex;
+  align-items: center;
+}
+
+.public-breadcrumbs ol {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.public-breadcrumbs li {
+  gap: 0.5rem;
+}
+
+.public-breadcrumbs a {
+  border-radius: 0.4rem;
+  color: #9aa8ff;
+}
+
+.public-breadcrumbs a:hover,
+.public-breadcrumbs a:focus-visible {
+  color: white;
+  outline: 2px solid #60a5fa;
+  outline-offset: 3px;
+}
+
 .surface-panel {
   background: linear-gradient(180deg, rgb(23 32 54 / 0.84), rgb(13 18 32 / 0.92));
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.045), 0 30px 80px rgb(0 0 0 / 0.24);

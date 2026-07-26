@@ -1,10 +1,17 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { PublicShell } from '@/components/layout/public-shell';
+import { Breadcrumbs } from '@/components/seo/breadcrumbs';
+import { JsonLd } from '@/components/seo/json-ld';
+import { buildPublicMetadata, PRIVACY_SEO } from '@/lib/seo/metadata';
+import { type BreadcrumbItem, privacyPageGraph } from '@/lib/seo/schema';
 
-export const metadata: Metadata = {
-  title: 'Ochrana súkromia',
-  description: 'Informácie o spracúvaní osobných a obchodných údajov v službe DCZ WebAudit.',
-};
+export const metadata: Metadata = buildPublicMetadata(PRIVACY_SEO);
+
+const breadcrumbs: readonly BreadcrumbItem[] = [
+  { name: 'Domov', href: '/' },
+  { name: 'Ochrana súkromia', href: '/privacy' },
+];
 
 const sections = [
   [
@@ -87,8 +94,10 @@ const sections = [
 export default function PrivacyPage() {
   return (
     <PublicShell>
-      <article className="mx-auto max-w-4xl px-5 py-16 leading-7 text-slate-300 lg:px-8 lg:py-24">
-        <p className="eyebrow">Ochrana súkromia</p>
+      <JsonLd data={privacyPageGraph(breadcrumbs)} />
+      <article className="mx-auto max-w-4xl px-5 py-12 leading-7 text-slate-300 lg:px-8 lg:py-20">
+        <Breadcrumbs items={breadcrumbs} />
+        <p className="eyebrow mt-10">Ochrana súkromia</p>
         <h1 className="mt-4 text-4xl font-semibold text-white md:text-6xl">Ako pracujeme s údajmi</h1>
         <p className="mt-5 text-sm text-slate-500">Dátum účinnosti: 25. júl 2026</p>
         <p className="mt-6">
@@ -102,6 +111,18 @@ export default function PrivacyPage() {
             <p className="mt-3">{content}</p>
           </section>
         ))}
+        <section className="mt-12 rounded-2xl border border-blue-300/15 bg-blue-400/[.04] p-6">
+          <h2 className="text-2xl font-semibold text-white">Súvisiace informácie</h2>
+          <p className="mt-3">
+            Technický rozsah, bezpečné načítanie a limity výsledku opisuje{' '}
+            <Link className="font-semibold text-blue-300 hover:text-blue-200" href="/methodology">
+              metodika DCZ WebAudit
+            </Link>. Otázky alebo žiadosti týkajúce sa údajov môžete poslať cez{' '}
+            <Link className="font-semibold text-blue-300 hover:text-blue-200" href="/contact">
+              kontaktnú stránku
+            </Link>.
+          </p>
+        </section>
       </article>
     </PublicShell>
   );

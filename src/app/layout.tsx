@@ -1,5 +1,12 @@
 import type { Metadata } from 'next';
 import { Geist } from 'next/font/google';
+import {
+  SITE_LOCALE,
+  SITE_NAME,
+  isIndexingPrevented,
+  metadataBaseUrl,
+} from '@/lib/seo/config';
+import { HOME_SEO, renderedTitle } from '@/lib/seo/metadata';
 import './globals.css';
 
 const geist = Geist({
@@ -9,30 +16,40 @@ const geist = Geist({
   fallback: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
 });
 
-const metadataBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || 'http://localhost:3000';
-const preventIndexing =
-  process.env.NODE_ENV !== 'production' ||
-  Boolean(process.env.VERCEL_ENV && process.env.VERCEL_ENV !== 'production') ||
-  process.env.NEXT_PUBLIC_PREVENT_INDEXING === 'true';
+const preventIndexing = isIndexingPrevented();
+const defaultTitle = renderedTitle(HOME_SEO.title);
 
 export const metadata: Metadata = {
-  metadataBase: new URL(metadataBaseUrl),
+  metadataBase: metadataBaseUrl(),
   title: {
-    default: 'DCZ WebAudit — predbežná diagnostika webu',
-    template: '%s — DCZ WebAudit',
+    default: defaultTitle,
+    template: `%s | ${SITE_NAME}`,
   },
-  description:
-    'Získajte vysvetliteľný predbežný audit techniky, SEO, dôvery a konverznej cesty vášho webu.',
+  description: HOME_SEO.description,
   robots: preventIndexing ? { index: false, follow: false, nocache: true } : undefined,
   openGraph: {
     type: 'website',
-    locale: 'sk_SK',
-    siteName: 'DCZ WebAudit',
-    images: ['/og-image.png'],
+    locale: SITE_LOCALE,
+    siteName: SITE_NAME,
+    title: defaultTitle,
+    description: HOME_SEO.description,
+    images: [{
+      url: '/og-image.png',
+      width: 1200,
+      height: 630,
+      alt: 'DCZ WebAudit – predbežná diagnostika verejných signálov webu',
+    }],
   },
   twitter: {
     card: 'summary_large_image',
-    images: ['/og-image.png'],
+    title: defaultTitle,
+    description: HOME_SEO.description,
+    images: [{
+      url: '/og-image.png',
+      width: 1200,
+      height: 630,
+      alt: 'DCZ WebAudit – predbežná diagnostika verejných signálov webu',
+    }],
   },
 };
 

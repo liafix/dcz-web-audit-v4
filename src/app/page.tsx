@@ -1,9 +1,15 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { PremiumHero } from '@/components/landing/premium-hero';
 import { PublicShell } from '@/components/layout/public-shell';
 import { LandingViewTracker } from '@/components/revenue/landing-view-tracker';
+import { JsonLd } from '@/components/seo/json-ld';
 import { Card, CardContent } from '@/components/ui/card';
 import { buttonClass } from '@/components/ui/button';
+import { buildPublicMetadata, HOME_SEO } from '@/lib/seo/metadata';
+import { homePageGraph } from '@/lib/seo/schema';
+
+export const metadata: Metadata = buildPublicMetadata(HOME_SEO);
 
 const deliverables = [
   ['Executive preview', 'Najväčšie riziko, príležitosť a odporúčaná prvá investícia pre rozhodovateľa.'],
@@ -28,7 +34,39 @@ const fit = [
 ] as const;
 
 export default function HomePage() { return <PublicShell><LandingViewTracker />
+  <JsonLd data={homePageGraph()} />
   <PremiumHero />
+
+  <section className="mx-auto max-w-7xl px-5 py-16 lg:px-8">
+    <div className="grid gap-8 lg:grid-cols-[1.1fr_.9fr] lg:items-start">
+      <div>
+        <p className="eyebrow">Čo je DCZ WebAudit?</p>
+        <h2 className="section-title">Predbežná diagnostika verejných signálov webu.</h2>
+        <p className="mt-5 max-w-3xl leading-7 text-slate-300">
+          DCZ WebAudit je webová aplikácia a diagnostická služba prevádzkovaná spoločnosťou
+          AesDC s. r. o. Bez prihlásenia do kontrolovaného webu vyhodnotí verejne dostupnú titulnú
+          stránku, základné technické súbory a dostupné externé metriky.
+        </p>
+      </div>
+      <Card>
+        <CardContent>
+          <h3 className="text-xl font-semibold text-white">Dôkazy pred tvrdeniami</h3>
+          <p className="mt-3 text-sm leading-7 text-slate-400">
+            Výsledok je prvotná automatizovaná diagnostika, nie kompletný crawl ani náhrada
+            manuálneho SEO, UX, právneho alebo bezpečnostného auditu.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-4 text-sm font-semibold">
+            <Link className="text-blue-300 hover:text-blue-200" href="/methodology">
+              Ako diagnostika funguje →
+            </Link>
+            <Link className="text-blue-300 hover:text-blue-200" href="/privacy">
+              Ako chránime údaje →
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  </section>
 
   <section className="mx-auto max-w-7xl px-5 py-16 lg:px-8"><div className="max-w-4xl"><p className="eyebrow">Čo získate</p><h2 className="section-title">Nie ďalší SEO checklist. Podklad na obchodné rozhodnutie.</h2><p className="mt-5 max-w-3xl leading-7 text-slate-400">High-end klient nepotrebuje iba vedieť, že chýba meta description. Potrebuje pochopiť, ktorý krok môže byť blokovaný, aký je dôkaz a aký scope opravy je primeraný.</p></div><div className="mt-8 grid gap-4 md:grid-cols-2">{deliverables.map(([title, text], index) => <Card key={title} className="group transition-transform duration-200 hover:-translate-y-1 hover:border-blue-300/20"><CardContent className="grid gap-4 sm:grid-cols-[auto_1fr]"><span className="grid size-11 place-items-center rounded-xl border border-blue-300/15 bg-blue-400/10 text-sm font-bold text-blue-200">0{index + 1}</span><div><h3 className="text-xl font-semibold text-white">{title}</h3><p className="mt-2 text-sm leading-6 text-slate-400">{text}</p></div></CardContent></Card>)}</div></section>
 

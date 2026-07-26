@@ -111,10 +111,24 @@ runs cannot claim the same job.
 ## Domain, HTTPS, and indexing
 
 1. Test the temporary domain with `NEXT_PUBLIC_PREVENT_INDEXING=true`.
-2. Confirm security headers, private-route noindex/no-store behavior, and `/robots.txt`.
-3. Connect `dczweb.com`, enable SSL, and preserve unrelated mail DNS records.
-4. Set the final HTTPS application URL and redeploy.
-5. Set indexing prevention to false only after final production smoke testing.
+2. Confirm the staging responses do not emit a canonical URL or production `og:url`, every page
+   has `noindex,nofollow`, `X-Robots-Tag` is present, `/robots.txt` contains `Disallow: /` without a
+   sitemap declaration, and `/sitemap.xml` is empty.
+3. Confirm security headers and private-route noindex/no-store behavior remain intact.
+4. Connect only the canonical host `dczweb.com`, enable SSL, and preserve unrelated mail DNS
+   records. Configure `www.dczweb.com` and any legacy application hostname as permanent redirects
+   to the same path on `https://dczweb.com`; do not serve duplicate indexable copies.
+5. Set `NEXT_PUBLIC_APP_URL=https://dczweb.com`, keep indexing prevention enabled, and redeploy.
+6. Smoke-test the production hostname before changing the indexing flag. Check `/`,
+   `/methodology`, `/privacy`, `/contact`, `/robots.txt`, and `/sitemap.xml`; confirm HTTPS, the
+   preferred host, canonical URLs, Open Graph URLs, crawler directives, and redirects.
+7. Set indexing prevention to false only after that smoke test, then redeploy once more.
+8. Verify the live indexable set is exactly `/`, `/methodology`, `/privacy`, and `/contact`.
+   Case studies remain outside the sitemap and carry `noindex,follow` until an explicit editorial
+   publication decision is recorded.
+
+These are manual hPanel, DNS, and live-site actions. This repository change does not modify
+Hostinger, DNS, Search Console, analytics, or any other external system.
 
 ## Health and logs
 
