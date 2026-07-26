@@ -1,5 +1,13 @@
 import type { Metadata } from 'next';
+import { Geist } from 'next/font/google';
 import './globals.css';
+
+const geist = Geist({
+  subsets: ['latin', 'latin-ext'],
+  display: 'swap',
+  variable: '--font-dcz-geist',
+  fallback: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+});
 
 const metadataBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || 'http://localhost:3000';
 const preventIndexing =
@@ -30,7 +38,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="sk">
+    <html lang="sk" className={geist.variable}>
       <body>{children}</body>
     </html>
   );

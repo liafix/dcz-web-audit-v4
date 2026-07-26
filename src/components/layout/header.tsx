@@ -4,9 +4,45 @@ import { buttonClass } from '@/components/ui/button';
 
 const links = [['Metodika', '/methodology'], ['Súkromie', '/privacy'], ['Kontakt', '/contact']] as const;
 export function Header() {
-  return <header className="sticky top-0 z-40 border-b border-white/8 bg-[#080b14]/86 backdrop-blur-xl"><div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-5 py-4 lg:px-8">
-    <Link className="focus-ring rounded-xl" href="/"><BrandMark /></Link>
-    <nav className="hidden items-center gap-1 md:flex" aria-label="Hlavná navigácia">{links.map(([label, href]) => <Link key={href} className="focus-ring rounded-lg px-3 py-2 text-sm text-slate-400 transition-colors duration-200 hover:text-white" href={href}>{label}</Link>)}</nav>
-    <div className="flex items-center gap-2"><Link className={`${buttonClass('secondary')} hidden sm:inline-flex`} href="/audit/start">Spustiť audit</Link><details className="relative md:hidden"><summary className="focus-ring grid min-h-11 min-w-11 cursor-pointer list-none place-items-center rounded-xl border border-white/12 bg-white/[0.04] text-white" aria-label="Otvoriť menu"><svg viewBox="0 0 24 24" fill="none" className="size-5" stroke="currentColor" strokeWidth="1.8"><path d="M4 7h16M4 12h16M4 17h16" /></svg></summary><nav className="absolute right-0 mt-3 grid min-w-48 rounded-2xl border border-white/12 bg-[#0d1220] p-2 shadow-2xl shadow-black/40" aria-label="Mobilná navigácia">{links.map(([label, href]) => <Link key={href} className="focus-ring rounded-xl px-4 py-3 text-sm text-slate-300 hover:bg-white/[0.06] hover:text-white" href={href}>{label}</Link>)}<Link className={`${buttonClass('primary')} mt-2 sm:hidden`} href="/audit/start">Spustiť audit</Link></nav></details></div>
-  </div></header>;
+  return (
+    <header className="premium-site-header">
+      <div className="premium-site-header__panel">
+        <Link className="focus-ring rounded-xl" href="/" aria-label="DCZ WebAudit – domov">
+          <BrandMark priority decorative />
+        </Link>
+        <nav className="premium-site-header__nav" aria-label="Hlavná navigácia">
+          {links.map(([label, href]) => (
+            <Link key={href} className="premium-site-header__link focus-ring" href={href}>
+              {label}
+            </Link>
+          ))}
+        </nav>
+        <div className="premium-site-header__actions">
+          <Link className={`${buttonClass('accent')} premium-site-header__cta`} href="/#audit-url">
+            Spustiť audit
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20" className="premium-button-arrow">
+              <path d="m7 4 6 6-6 6" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+            </svg>
+          </Link>
+          <details className="premium-site-header__menu">
+            <summary className="premium-site-header__menu-trigger focus-ring" aria-label="Otvoriť menu">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+              </svg>
+            </summary>
+            <nav className="premium-site-header__mobile-nav" aria-label="Mobilná navigácia">
+              {links.map(([label, href]) => (
+                <Link key={href} className="premium-site-header__mobile-link focus-ring" href={href}>
+                  {label}
+                </Link>
+              ))}
+              <Link className={`${buttonClass('accent')} premium-site-header__mobile-cta`} href="/#audit-url">
+                Spustiť audit
+              </Link>
+            </nav>
+          </details>
+        </div>
+      </div>
+    </header>
+  );
 }
