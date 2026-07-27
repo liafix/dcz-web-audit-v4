@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { recordFunnelEventSafe, recordSecurityEventSafe } from '@/lib/analytics/funnel';
 import { countRecentAuditsByFingerprint, createAudit } from '@/lib/db/queries';
+import { appUrl } from '@/lib/env';
 import { PublicAppError } from '@/lib/errors/public-error';
 import { readJsonBody } from '@/lib/http/request';
 import { jsonError } from '@/lib/http/response';
@@ -8,7 +9,7 @@ import { enforceRateLimit } from '@/lib/rate-limit/server-rate-limit';
 import { normalizeUrl } from '@/lib/security/normalize-url';
 import { randomToken, sha256 } from '@/lib/security/crypto';
 import { requestFingerprint } from '@/lib/security/request-fingerprint';
-import { verifyTurnstile } from '@/lib/security/turnstile';
+import { verifyTurnstileDetailed } from '@/lib/security/turnstile';
 import { assertSameOrigin } from '@/lib/security/request-origin';
 import { startAuditSchema } from '@/lib/validation/audit';
 
@@ -44,11 +45,25 @@ export async function POST(request: Request) {
         publicMessage: 'Požiadavku nebolo možné overiť.',
       });
     }
-    if (!(await verifyTurnstile(request, parsed.data.turnstileToken ?? null))) {
+    const turnstile = await verifyTurnstileDetailed(
+      request,
+      parsed.data.turnstileToken ?? null,
+    );
+    if (!turnstile.success) {
       throw new PublicAppError({
         code: 'turnstile_failed',
         status: 422,
         publicMessage: 'Bezpečnostné overenie zlyhalo. Obnovte stránku a skúste to znova.',
+        details: {
+          siteverifyHttpStatus: turnstile.siteverifyHttpStatus,
+          siteverifySuccess: turnstile.success,
+          siteverifyErrorCodes: turnstile.errorCodes,
+          expectedHostname: new URL(appUrl()).hostname.toLowerCase(),
+          returnedHostname: turnstile.returnedHostname,
+          expectedAction: null,
+          returnedAction: turnstile.returnedAction,
+          failureClassification: turnstile.failureClassification,
+        },
       });
     }
 
