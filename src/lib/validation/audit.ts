@@ -21,6 +21,7 @@ export const unlockAuditSchema = z.object({
   phone: z.string().trim().max(40).optional().or(z.literal('')),
   primaryGoal: z.string().trim().max(500).optional().or(z.literal('')),
   marketingConsent: z.boolean().optional().default(false),
+  website: z.string().max(0).optional().default(''),
   turnstileToken: z.string().nullable().optional(),
 });
 

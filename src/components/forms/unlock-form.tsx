@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { TurnstileWidget } from '@/components/forms/turnstile-widget';
+import { useTurnstileAttempt } from '@/components/forms/use-turnstile-attempt';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -12,25 +13,23 @@ interface UnlockResponse {
   emailSent?: boolean;
   error?: string;
   errorId?: string;
+  code?: string;
 }
 
-export function UnlockForm({ token }: { token: string }) {
+export function UnlockForm({ token, funnelVerified = false }: { token: string; funnelVerified?: boolean }) {
   const router = useRouter();
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const [verificationRequired, setVerificationRequired] = useState(!funnelVerified);
   const [error, setError] = useState<string | null>(null);
-  const onTurnstileToken = useCallback((value: string | null) => setTurnstileToken(value), []);
+  const turnstile = useTurnstileAttempt();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    if (siteKey && !turnstileToken) {
-      setError('Dokončite bezpečnostné overenie.');
-      return;
-    }
+    const attempt = turnstile.begin(verificationRequired && Boolean(siteKey));
+    if (attempt.status === 'busy') return;
+    if (attempt.status === 'missing') return setError('Dokončite viditeľné bezpečnostné overenie a formulár odošlite znova.');
     const form = new FormData(event.currentTarget);
-    setPending(true);
     try {
       const response = await fetch(`/api/audit/${encodeURIComponent(token)}/unlock`, {
         method: 'POST',
@@ -40,19 +39,31 @@ export function UnlockForm({ token }: { token: string }) {
           name: form.get('name'),
           company: form.get('company'),
           marketingConsent: form.get('marketingConsent') === 'on',
-          turnstileToken,
+          website: form.get('website'),
+          turnstileToken: attempt.token,
         }),
       });
       const data = (await response.json()) as UnlockResponse;
+      if (response.status === 428 && data.code === 'verification_required') {
+        setVerificationRequired(true);
+        setError(data.error ?? 'Platnosť bezpečnostného overenia vypršala. Dokončite nové overenie a formulár odošlite znova.');
+        turnstile.release(true);
+        return;
+      }
       if (!response.ok || !data.checkEmailUrl) throw new Error(`${data.error ?? 'E-mail sa nepodarilo odoslať.'}${data.errorId ? ` ID: ${data.errorId}` : ''}`);
       const email = String(form.get('email') ?? '');
       sessionStorage.setItem(`dcz-audit-email:${token}`, email);
       router.push(data.checkEmailUrl);
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'E-mail sa nepodarilo odoslať.');
-      setPending(false);
+      turnstile.release(true);
     }
   }
+
+  const challengeIssue = (message: string) => {
+    turnstile.clearChallenge();
+    setError(message);
+  };
 
   return (
     <form onSubmit={submit} className="space-y-4" noValidate>
@@ -71,13 +82,32 @@ export function UnlockForm({ token }: { token: string }) {
           <Input name="company" autoComplete="organization" placeholder="Názov firmy" />
         </label>
       </div>
+      <input tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" name="website" />
       <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/8 bg-white/[0.025] p-3 text-sm leading-6 text-slate-400 transition-colors duration-200 hover:border-white/15">
         <input type="checkbox" name="marketingConsent" className="mt-1 size-4 accent-blue-500" />
         <span>Súhlasím s občasnými praktickými tipmi od DCZ. Tento súhlas nie je podmienkou doručenia výsledku.</span>
       </label>
-      <TurnstileWidget siteKey={siteKey} onToken={onTurnstileToken} />
-      <Button type="submit" disabled={pending} className="w-full">
-        {pending ? 'Odosielame bezpečný odkaz…' : 'Poslať celý výsledok e-mailom'}
+      {verificationRequired ? (
+        <div className="space-y-2">
+          <p className="text-sm leading-6 text-amber-100">
+            Dokončite nové bezpečnostné overenie. Po overení formulár odošlite znova.
+          </p>
+          <TurnstileWidget
+            ref={turnstile.widgetRef}
+            siteKey={siteKey}
+            onToken={turnstile.onToken}
+            onExpired={() => challengeIssue('Platnosť bezpečnostného overenia vypršala. Dokončite ho znova.')}
+            onError={() => challengeIssue('Bezpečnostné overenie sa nepodarilo načítať. Skúste ho znova.')}
+            onTimeout={() => challengeIssue('Bezpečnostné overenie vypršalo pre nečinnosť. Dokončite ho znova.')}
+          />
+        </div>
+      ) : (
+        <p className="rounded-xl border border-emerald-300/20 bg-emerald-400/8 px-4 py-3 text-sm text-emerald-100">
+          Bezpečnostné overenie z úvodného kroku je stále platné pre tento audit.
+        </p>
+      )}
+      <Button type="submit" disabled={turnstile.pending} className="w-full">
+        {turnstile.pending ? 'Odosielame bezpečný odkaz…' : 'Poslať celý výsledok e-mailom'}
       </Button>
       <p className="text-xs leading-5 text-slate-500">
         Celý report sa otvorí až cez odkaz v e-maile. Spracovanie údajov opisujú{' '}

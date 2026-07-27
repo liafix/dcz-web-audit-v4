@@ -34,8 +34,13 @@ Staging:
 ```env
 NEXT_PUBLIC_APP_URL=https://temporary-hostinger-domain.example
 NEXT_PUBLIC_PREVENT_INDEXING=true
-TURNSTILE_ENABLED=false
+TURNSTILE_ENABLED=true
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=<staging-site-key>
 ```
+
+Set `TURNSTILE_SECRET_KEY` to the staging-only Turnstile secret and
+`FUNNEL_SESSION_SECRET` to an independent random value of at least 32 bytes in the
+Hostinger environment-variable UI. Do not place either value in this file.
 
 Production:
 
@@ -54,6 +59,7 @@ MAIL_FROM
 DCZ_NOTIFICATION_EMAIL
 NEXT_PUBLIC_TURNSTILE_SITE_KEY
 TURNSTILE_SECRET_KEY
+FUNNEL_SESSION_SECRET
 REQUEST_FINGERPRINT_SECRET
 ACCESS_COOKIE_SECRET
 ADMIN_SESSION_SECRET

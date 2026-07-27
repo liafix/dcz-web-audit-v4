@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PublicAppError } from '@/lib/errors/public-error';
 
 const mocks = vi.hoisted(() => ({
   assertSameOrigin: vi.fn(),
   verifyTurnstileDetailed: vi.fn(),
+  issueVerifiedFunnelSession: vi.fn(),
   normalizeUrl: vi.fn(),
   requestFingerprint: vi.fn(),
   enforceRateLimit: vi.fn(),
@@ -22,6 +24,10 @@ vi.mock('@/lib/security/request-origin', () => ({
 
 vi.mock('@/lib/security/turnstile', () => ({
   verifyTurnstileDetailed: mocks.verifyTurnstileDetailed,
+}));
+
+vi.mock('@/lib/auth/funnel-verification', () => ({
+  issueVerifiedFunnelSession: mocks.issueVerifiedFunnelSession,
 }));
 
 vi.mock('@/lib/security/normalize-url', () => ({
@@ -93,6 +99,7 @@ describe('POST /api/audit/start Turnstile diagnostics', () => {
     mocks.logApplicationEvent.mockResolvedValue(undefined);
     mocks.recordFunnelEventSafe.mockResolvedValue(undefined);
     mocks.recordSecurityEventSafe.mockResolvedValue(undefined);
+    mocks.issueVerifiedFunnelSession.mockResolvedValue(undefined);
   });
 
   it('preserves the public 422 response and logs only allowlisted diagnostics with the same error ID', async () => {
@@ -126,8 +133,9 @@ describe('POST /api/audit/start Turnstile diagnostics', () => {
       errorId: INTERNAL_ERROR_ID,
     });
     expect(mocks.createAudit).not.toHaveBeenCalled();
-    expect(mocks.normalizeUrl).not.toHaveBeenCalled();
+    expect(mocks.normalizeUrl).toHaveBeenCalledWith(AUDITED_URL);
     expect(mocks.enforceRateLimit).not.toHaveBeenCalled();
+    expect(mocks.issueVerifiedFunnelSession).not.toHaveBeenCalled();
 
     expect(mocks.logApplicationEvent).toHaveBeenCalledTimes(1);
     const logInput = mocks.logApplicationEvent.mock.calls[0]?.[0] as {
@@ -223,6 +231,97 @@ describe('POST /api/audit/start Turnstile diagnostics', () => {
       token: 'audit_public-token-suffix',
     });
     expect(mocks.createAudit).toHaveBeenCalledTimes(1);
+    expect(mocks.issueVerifiedFunnelSession).toHaveBeenCalledWith('audit-id');
+    expect(mocks.assertSameOrigin.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.normalizeUrl.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.normalizeUrl.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.verifyTurnstileDetailed.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.verifyTurnstileDetailed.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.enforceRateLimit.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.enforceRateLimit.mock.invocationCallOrder[1]).toBeLessThan(
+      mocks.createAudit.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.createAudit.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.issueVerifiedFunnelSession.mock.invocationCallOrder[0]!,
+    );
     expect(mocks.logApplicationEvent).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unsafe normalized URL before Siteverify and session issuance', async () => {
+    mocks.normalizeUrl.mockImplementation(() => {
+      throw new Error('unsafe URL');
+    });
+
+    const response = await POST(auditRequest({
+      url: 'http://127.0.0.1',
+      website: '',
+      turnstileToken: TEST_TOKEN,
+    }));
+
+    expect(response.status).toBe(422);
+    expect(mocks.verifyTurnstileDetailed).not.toHaveBeenCalled();
+    expect(mocks.enforceRateLimit).not.toHaveBeenCalled();
+    expect(mocks.createAudit).not.toHaveBeenCalled();
+    expect(mocks.issueVerifiedFunnelSession).not.toHaveBeenCalled();
+  });
+
+  it('does not issue a session when the request is rate limited after Siteverify', async () => {
+    mocks.verifyTurnstileDetailed.mockResolvedValue({
+      siteverifyHttpStatus: 200,
+      success: true,
+      errorCodes: [],
+      returnedHostname: 'dczweb.com',
+      returnedAction: null,
+      failureClassification: null,
+    });
+    mocks.normalizeUrl.mockReturnValue({ url: 'https://example.test/', origin: 'https://example.test' });
+    mocks.requestFingerprint.mockReturnValue('fingerprint-hash');
+    mocks.enforceRateLimit.mockRejectedValueOnce(new PublicAppError({
+      code: 'rate_limited',
+      status: 429,
+      publicMessage: 'Dosiahli ste bezpečnostný limit.',
+    }));
+
+    const response = await POST(auditRequest({
+      url: 'https://example.test',
+      website: '',
+      turnstileToken: TEST_TOKEN,
+    }));
+
+    expect(response.status).toBe(429);
+    expect(mocks.createAudit).not.toHaveBeenCalled();
+    expect(mocks.issueVerifiedFunnelSession).not.toHaveBeenCalled();
+  });
+
+  it('does not issue a session when audit creation fails', async () => {
+    mocks.verifyTurnstileDetailed.mockResolvedValue({
+      siteverifyHttpStatus: 200,
+      success: true,
+      errorCodes: [],
+      returnedHostname: 'dczweb.com',
+      returnedAction: null,
+      failureClassification: null,
+    });
+    mocks.normalizeUrl.mockReturnValue({ url: 'https://example.test/', origin: 'https://example.test' });
+    mocks.requestFingerprint.mockReturnValue('fingerprint-hash');
+    mocks.enforceRateLimit
+      .mockResolvedValueOnce('hour-subject-hash')
+      .mockResolvedValueOnce('day-subject-hash');
+    mocks.countRecentAuditsByFingerprint.mockResolvedValue(0);
+    mocks.randomToken.mockReturnValue('public-token-suffix');
+    mocks.sha256.mockReturnValue('deduplication-hash');
+    mocks.createAudit.mockRejectedValue(new Error('database unavailable'));
+
+    const response = await POST(auditRequest({
+      url: 'https://example.test',
+      website: '',
+      turnstileToken: TEST_TOKEN,
+    }));
+
+    expect(response.status).toBe(500);
+    expect(mocks.issueVerifiedFunnelSession).not.toHaveBeenCalled();
   });
 });

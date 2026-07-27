@@ -7,7 +7,7 @@ describe('landing audit form contract', () => {
     const requiredSnippets = [
       "fetch('/api/audit/start'",
       "method: 'POST'",
-      'url, website, turnstileToken,',
+      'url, website, turnstileToken: attempt.token,',
       "utmSource: searchParams.get('utm_source')",
       "utmMedium: searchParams.get('utm_medium')",
       "utmCampaign: searchParams.get('utm_campaign')",
@@ -33,7 +33,9 @@ describe('landing audit form contract', () => {
     expect(source).toContain('id="audit-help"');
     expect(source).toContain('id="audit-error"');
     expect(source).toContain('name="website"');
-    expect(source).toContain('<TurnstileWidget siteKey={siteKey} onToken={onTurnstileToken} responsive={isHero} />');
+    expect(source).toContain('ref={turnstile.widgetRef}');
+    expect(source).toContain('onToken={turnstile.onToken}');
+    expect(source).toContain('responsive={isHero}');
     expect(startPage).toContain('<AuditForm />');
   });
 });

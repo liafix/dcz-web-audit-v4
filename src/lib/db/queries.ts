@@ -249,7 +249,7 @@ export async function upsertLead(input: {
         company: input.company ?? null,
         phone: input.phone ?? null,
         primaryGoal: input.primaryGoal ?? null,
-        stage: input.stage,
+        stage: sql`case when ${leads.emailVerifiedAt} is not null then ${leads.stage} else ${input.stage} end`,
         marketingConsent: input.marketingConsent,
         consentVersion: '2026-07-v3',
         consentAt: now,
@@ -297,6 +297,35 @@ export async function markLeadEmailDelivery(
       updatedAt: new Date(),
     })
     .where(eq(leads.id, leadId));
+}
+
+export async function claimLeadEmailDelivery(leadId: string): Promise<LeadRecord | null> {
+  const now = new Date();
+  const abandonedBefore = new Date(now.getTime() - 5 * 60 * 1000);
+  const [record] = await db()
+    .update(leads)
+    .set({
+      emailLastSentAt: now,
+      emailDeliveryStatus: 'pending',
+      emailDeliveryError: null,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(leads.id, leadId),
+        isNull(leads.emailVerifiedAt),
+        or(
+          isNull(leads.emailLastSentAt),
+          eq(leads.emailDeliveryStatus, 'failed'),
+          and(
+            eq(leads.emailDeliveryStatus, 'pending'),
+            lt(leads.emailLastSentAt, abandonedBefore),
+          ),
+        ),
+      ),
+    )
+    .returning();
+  return record ?? null;
 }
 
 export async function markLeadVerified(

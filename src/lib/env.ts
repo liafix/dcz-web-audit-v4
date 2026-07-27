@@ -46,6 +46,7 @@ export function productionConfigurationIssues(): string[] {
     'DATABASE_URL',
     'REQUEST_FINGERPRINT_SECRET',
     'ACCESS_COOKIE_SECRET',
+    'FUNNEL_SESSION_SECRET',
     'ADMIN_SESSION_SECRET',
     'ADMIN_EMAIL',
     'ADMIN_PASSWORD_HASH',
@@ -53,7 +54,12 @@ export function productionConfigurationIssues(): string[] {
   for (const key of required) {
     if (!process.env[key]?.trim()) issues.push(key);
   }
-  for (const key of ['REQUEST_FINGERPRINT_SECRET', 'ACCESS_COOKIE_SECRET', 'ADMIN_SESSION_SECRET']) {
+  for (const key of [
+    'REQUEST_FINGERPRINT_SECRET',
+    'ACCESS_COOKIE_SECRET',
+    'FUNNEL_SESSION_SECRET',
+    'ADMIN_SESSION_SECRET',
+  ]) {
     const value = process.env[key]?.trim();
     if (value && Buffer.byteLength(value, 'utf8') < 32) issues.push(`${key}_MIN_32_BYTES`);
   }

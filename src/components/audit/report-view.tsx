@@ -28,7 +28,7 @@ export interface RevenueViewContext {
   bookingStatus: string | null;
 }
 
-export function ReportView({ report, evidence, token, full, revenue }: { report: AuditReport; evidence: AuditEvidence; token: string; full: boolean; revenue?: RevenueViewContext | null }) {
+export function ReportView({ report, evidence, token, full, revenue, funnelVerified = false }: { report: AuditReport; evidence: AuditEvidence; token: string; full: boolean; revenue?: RevenueViewContext | null; funnelVerified?: boolean }) {
   const findings = full ? report.findings : report.findings.slice(0, 3);
   const locked = Math.max(0, report.findings.length - findings.length);
   const topFinding = report.findings[0];
@@ -47,7 +47,7 @@ export function ReportView({ report, evidence, token, full, revenue }: { report:
 
     <section id="findings" className="scroll-mt-24"><p className="text-sm font-semibold tracking-[0.2em] text-blue-300 uppercase">Prioritné bariéry</p><h2 className="mt-3 text-3xl font-semibold text-white">Evidence a konkrétne odporúčania</h2><div className="mt-6 grid gap-4 lg:grid-cols-2">{findings.map((finding) => <FindingCard key={finding.id} finding={finding} />)}</div></section>
 
-    {!full && <Card className="border-blue-400/20"><CardContent className="grid gap-7 lg:grid-cols-[1fr_1.2fr] lg:items-center"><div><p className="text-sm font-semibold tracking-[0.18em] text-violet-300 uppercase">Celý výsledok</p><h2 className="mt-3 text-3xl font-semibold text-white">{locked > 0 ? `Pošlite si ďalších ${locked} zistení, celú Money Leak Map a ROI modul` : 'Pošlite si celý report a bezpečný odkaz na návrat'}</h2><p className="mt-4 leading-7 text-slate-400">Celý report otvoríte až cez časovo obmedzený e-mailový odkaz. E-mail sa overí vedomým potvrdením, nie automatickým scannerom.</p></div><UnlockForm token={token} /></CardContent></Card>}
+    {!full && <Card className="border-blue-400/20"><CardContent className="grid gap-7 lg:grid-cols-[1fr_1.2fr] lg:items-center"><div><p className="text-sm font-semibold tracking-[0.18em] text-violet-300 uppercase">Celý výsledok</p><h2 className="mt-3 text-3xl font-semibold text-white">{locked > 0 ? `Pošlite si ďalších ${locked} zistení, celú Money Leak Map a ROI modul` : 'Pošlite si celý report a bezpečný odkaz na návrat'}</h2><p className="mt-4 leading-7 text-slate-400">Celý report otvoríte až cez časovo obmedzený e-mailový odkaz. E-mail sa overí vedomým potvrdením, nie automatickým scannerom.</p></div><UnlockForm token={token} funnelVerified={funnelVerified} /></CardContent></Card>}
 
     <section><p className="text-sm font-semibold tracking-[0.2em] text-emerald-300 uppercase">Silné stránky</p><h2 className="mt-3 text-3xl font-semibold text-white">Čo už funguje správne</h2><div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">{report.strengths.slice(0, full ? 8 : 3).map((strength) => <StrengthCard key={strength.id} strength={strength} />)}</div></section>
 

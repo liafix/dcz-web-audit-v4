@@ -1,7 +1,14 @@
 'use client';
 
 import Script from 'next/script';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 
 declare global {
   interface Window {
@@ -15,22 +22,34 @@ declare global {
           callback: (token: string) => void;
           'expired-callback': () => void;
           'error-callback': () => void;
+          'timeout-callback': () => void;
         },
       ) => string;
       remove: (widgetId: string) => void;
+      reset: (widgetId: string) => void;
     };
   }
 }
 
-export function TurnstileWidget({
-  siteKey,
-  onToken,
-  responsive = false,
-}: {
+export interface TurnstileWidgetHandle {
+  reset: () => void;
+}
+
+export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, {
   siteKey?: string;
   onToken: (token: string | null) => void;
   responsive?: boolean;
-}) {
+  onExpired?: () => void;
+  onError?: () => void;
+  onTimeout?: () => void;
+}>(function TurnstileWidget({
+  siteKey,
+  onToken,
+  responsive = false,
+  onExpired,
+  onError,
+  onTimeout,
+}, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -46,10 +65,29 @@ export function TurnstileWidget({
         ? { size: availableWidth > 0 && availableWidth < 300 ? 'compact' as const : 'flexible' as const }
         : {}),
       callback: (token) => onToken(token),
-      'expired-callback': () => onToken(null),
-      'error-callback': () => onToken(null),
+      'expired-callback': () => {
+        onToken(null);
+        onExpired?.();
+      },
+      'error-callback': () => {
+        onToken(null);
+        onError?.();
+      },
+      'timeout-callback': () => {
+        onToken(null);
+        onTimeout?.();
+      },
     });
-  }, [loaded, onToken, responsive, siteKey]);
+  }, [loaded, onError, onExpired, onTimeout, onToken, responsive, siteKey]);
+
+  useImperativeHandle(ref, () => ({
+    reset() {
+      onToken(null);
+      if (widgetIdRef.current && window.turnstile) {
+        window.turnstile.reset(widgetIdRef.current);
+      }
+    },
+  }), [onToken]);
 
   useEffect(() => {
     renderWidget();
@@ -72,4 +110,4 @@ export function TurnstileWidget({
       <div ref={containerRef} className={responsive ? 'turnstile-slot' : 'min-h-16'} aria-label="Bezpečnostné overenie" />
     </>
   );
-}
+});

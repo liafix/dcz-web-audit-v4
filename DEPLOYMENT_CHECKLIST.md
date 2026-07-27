@@ -35,6 +35,7 @@
 - [ ] Install uses `npm ci --include=dev --no-audit --no-fund`.
 - [ ] Build uses `npm run build`; start uses `npm run start`.
 - [ ] Every required environment variable is configured in hPanel.
+- [ ] A new independent `FUNNEL_SESSION_SECRET` (minimum 32 bytes) is configured before deploying the session code.
 - [ ] Staging is noindex; production uses the final HTTPS URL.
 - [ ] `/api/health` returns 200 after deployment.
 - [ ] Hostinger proxy timeout supports the audit deadline.
@@ -45,6 +46,7 @@
 - [ ] Neon TLS connection works.
 - [ ] Resend sender domain, SPF, DKIM, and DMARC are reviewed.
 - [ ] Turnstile is enabled and verified in production.
+- [ ] Funnel cookie is HttpOnly, Secure, SameSite=Lax, Path=/ and expires after 25 minutes.
 - [ ] Monitoring webhook receives a redacted test event.
 - [ ] Booking URL and webhook/manual fallback work.
 

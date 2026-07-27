@@ -1,27 +1,24 @@
 'use client';
 
-import { useCallback, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { TurnstileWidget } from '@/components/forms/turnstile-widget';
+import { useTurnstileAttempt } from '@/components/forms/use-turnstile-attempt';
 import { Button } from '@/components/ui/button';
 import { Input, Textarea } from '@/components/ui/input';
 
 export function ManualReviewForm({ token }: { token: string }) {
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const onTurnstileToken = useCallback((value: string | null) => setTurnstileToken(value), []);
+  const turnstile = useTurnstileAttempt();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    if (siteKey && !turnstileToken) {
-      setError('Dokončite bezpečnostné overenie.');
-      return;
-    }
+    const attempt = turnstile.begin(Boolean(siteKey));
+    if (attempt.status === 'busy') return;
+    if (attempt.status === 'missing') return setError('Dokončite viditeľné bezpečnostné overenie a odošlite formulár znova.');
     const form = new FormData(event.currentTarget);
-    setPending(true);
     try {
       const response = await fetch(`/api/audit/${encodeURIComponent(token)}/manual-review`, {
         method: 'POST',
@@ -32,18 +29,22 @@ export function ManualReviewForm({ token }: { token: string }) {
           company: form.get('company'),
           phone: form.get('phone'),
           message: form.get('message'),
-          turnstileToken,
+          turnstileToken: attempt.token,
         }),
       });
       const data = (await response.json()) as { error?: string; errorId?: string };
       if (!response.ok) throw new Error(`${data.error ?? 'Žiadosť sa nepodarilo odoslať.'}${data.errorId ? ` ID: ${data.errorId}` : ''}`);
       setSuccess(true);
-      setPending(false);
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'Žiadosť sa nepodarilo odoslať.');
-      setPending(false);
+      turnstile.release(true);
     }
   }
+
+  const challengeIssue = (text: string) => {
+    turnstile.clearChallenge();
+    setError(text);
+  };
 
   if (success) {
     return (
@@ -63,8 +64,15 @@ export function ManualReviewForm({ token }: { token: string }) {
         <label className="space-y-2 text-sm text-slate-300"><span>Telefón</span><Input name="phone" autoComplete="tel" /></label>
       </div>
       <label className="space-y-2 text-sm text-slate-300"><span>Čo potrebujete vyriešiť? *</span><Textarea required name="message" placeholder="Napíšte cieľ, problém alebo termín projektu." /></label>
-      <TurnstileWidget siteKey={siteKey} onToken={onTurnstileToken} />
-      <Button type="submit" disabled={pending} className="w-full">{pending ? 'Odosielame…' : 'Požiadať o manuálnu kontrolu'}</Button>
+      <TurnstileWidget
+        ref={turnstile.widgetRef}
+        siteKey={siteKey}
+        onToken={turnstile.onToken}
+        onExpired={() => challengeIssue('Platnosť bezpečnostného overenia vypršala. Dokončite ho znova.')}
+        onError={() => challengeIssue('Bezpečnostné overenie sa nepodarilo načítať. Skúste ho znova.')}
+        onTimeout={() => challengeIssue('Bezpečnostné overenie vypršalo pre nečinnosť. Dokončite ho znova.')}
+      />
+      <Button type="submit" disabled={turnstile.pending} className="w-full">{turnstile.pending ? 'Odosielame…' : 'Požiadať o manuálnu kontrolu'}</Button>
       {error && <p role="alert" className="rounded-xl border border-red-400/25 bg-red-400/8 px-4 py-3 text-sm text-red-200">{error}</p>}
     </form>
   );

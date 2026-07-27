@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { recordFunnelEventSafe, recordSecurityEventSafe } from '@/lib/analytics/funnel';
+import { issueVerifiedFunnelSession } from '@/lib/auth/funnel-verification';
 import { countRecentAuditsByFingerprint, createAudit } from '@/lib/db/queries';
 import { appUrl } from '@/lib/env';
 import { PublicAppError } from '@/lib/errors/public-error';
@@ -45,6 +46,19 @@ export async function POST(request: Request) {
         publicMessage: 'Požiadavku nebolo možné overiť.',
       });
     }
+
+    let target: ReturnType<typeof normalizeUrl>;
+    try {
+      target = normalizeUrl(parsed.data.url);
+    } catch (error) {
+      throw new PublicAppError({
+        code: 'invalid_or_unsafe_url',
+        status: 422,
+        publicMessage: 'Zadanú adresu nie je možné bezpečne analyzovať. Skontrolujte URL.',
+        internalMessage: error instanceof Error ? error.message : undefined,
+      });
+    }
+
     const turnstile = await verifyTurnstileDetailed(
       request,
       parsed.data.turnstileToken ?? null,
@@ -64,18 +78,6 @@ export async function POST(request: Request) {
           returnedAction: turnstile.returnedAction,
           failureClassification: turnstile.failureClassification,
         },
-      });
-    }
-
-    let target: ReturnType<typeof normalizeUrl>;
-    try {
-      target = normalizeUrl(parsed.data.url);
-    } catch (error) {
-      throw new PublicAppError({
-        code: 'invalid_or_unsafe_url',
-        status: 422,
-        publicMessage: 'Zadanú adresu nie je možné bezpečne analyzovať. Skontrolujte URL.',
-        internalMessage: error instanceof Error ? error.message : undefined,
       });
     }
 
@@ -119,6 +121,8 @@ export async function POST(request: Request) {
       utmCampaign: parsed.data.utmCampaign ?? null,
       referrerHost: referrerHost(request, parsed.data.referrerHost),
     });
+
+    await issueVerifiedFunnelSession(audit.id);
 
     await Promise.all([
       recordFunnelEventSafe({

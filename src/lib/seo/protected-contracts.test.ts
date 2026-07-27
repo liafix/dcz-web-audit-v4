@@ -8,13 +8,15 @@ describe('protected funnel and indexing contracts', () => {
 
     expect(auditForm).toContain("fetch('/api/audit/start'");
     expect(auditForm).toContain('router.push(`/audit/${encodeURIComponent(data.token)}/progress`)');
-    expect(auditForm).toContain(
-      '<TurnstileWidget siteKey={siteKey} onToken={onTurnstileToken} responsive={isHero} />',
-    );
+    expect(auditForm).toContain('ref={turnstile.widgetRef}');
+    expect(auditForm).toContain('onToken={turnstile.onToken}');
+    expect(auditForm).toContain('responsive={isHero}');
     expect(turnstile).toContain('https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit');
     expect(turnstile).toContain("callback: (token) => onToken(token)");
-    expect(turnstile).toContain("'expired-callback': () => onToken(null)");
-    expect(turnstile).toContain("'error-callback': () => onToken(null)");
+    expect(turnstile).toContain("'expired-callback': () => {");
+    expect(turnstile).toContain("'error-callback': () => {");
+    expect(turnstile).toContain("'timeout-callback': () => {");
+    expect(turnstile).toContain('window.turnstile.reset(widgetIdRef.current)');
   });
 
   it('preserves private X-Robots-Tag and no-store route groups', async () => {
@@ -45,4 +47,3 @@ describe('protected funnel and indexing contracts', () => {
     }
   });
 });
-

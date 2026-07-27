@@ -5,8 +5,11 @@
 - green `npm ci --include=dev --no-audit --no-fund && npm run check`,
 - aplikované migrácie `0000` až `0004`,
 - testovacia PostgreSQL databáza,
-- funkčný Resend odosielateľ,
-- Turnstile testovacie alebo produkčné kľúče,
+- samostatný staging hostname s `NEXT_PUBLIC_PREVENT_INDEXING=true`,
+- samostatný `FUNNEL_SESSION_SECRET` s minimálne 32 bajtmi entropie,
+- Turnstile testovacie alebo staging kľúče viazané na staging hostname,
+- Resend je predvolene nenakonfigurovaný; e-mailové QA používa iba staging odosielateľa a kontrolovanú testovaciu schránku,
+- `DCZ_NOTIFICATION_EMAIL` pri staging QA smeruje iba do staging testovacej schránky, nikdy na produkčný kontakt,
 - nastavený booking provider,
 - noindex staging prostredie.
 
@@ -20,7 +23,13 @@
 - [ ] Hostinger proxy nepreruší audit pred 50-sekundovým aplikačným deadline.
 - [ ] Executive preview zodpovedá evidence.
 - [ ] Money Leak Map neobsahuje nepodložené finančné sumy.
+- [ ] Úspešný audit-start nastaví 25-minútovú HttpOnly funnel cookie; 422, 429 a zlyhanie databázy ju nenastavia.
+- [ ] Partial report po úspešnom štarte nezobrazuje druhý Turnstile.
+- [ ] Chýbajúca, expirovaná alebo cudzia audit session zobrazí použiteľný fallback Turnstile.
+- [ ] Exspirácia medzi renderom a submitom zachová kontaktné polia a nikdy formulár automaticky neodošle.
+- [ ] Po 422, 429 alebo chybe siete sa submitted Turnstile token nedá použiť znova.
 - [ ] Unlock vytvorí pending lead a odošle e-mail.
+- [ ] Dva súbežné unlock requesty vytvoria iba jeden delivery claim, jeden access token a jeden e-mailový pokus.
 - [ ] Samotné GET otvorenie magic linku e-mail neoverí.
 - [ ] POST potvrdenie odomkne report.
 - [ ] Celý report je bez access grantu neprístupný.
@@ -71,3 +80,4 @@
 ## Release rozhodnutie
 
 Produkčný soft launch je povolený až po splnení všetkých kritických bodov a po úspešnom spracovaní minimálne 10 interných/staging auditov bez straty leadu alebo nekonečného progressu.
+Produkčné nasadenie nesmie začať, kým Hostinger nemá nakonfigurovaný nový nezávislý `FUNNEL_SESSION_SECRET`; hodnota sa nesmie kopírovať z iného tajomstva.

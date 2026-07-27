@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { recordFunnelEventSafe, recordSecurityEventSafe } from '@/lib/analytics/funnel';
+import { hasVerifiedFunnelSession } from '@/lib/auth/funnel-verification';
 import { appUrl } from '@/lib/env';
 import {
+  claimLeadEmailDelivery,
   createReportAccessToken,
   findAuditByToken,
   markLeadEmailDelivery,
@@ -44,12 +46,22 @@ export async function POST(request: Request, context: { params: Promise<{ token:
         publicMessage: 'Skontrolujte e-mail a formulárové údaje.',
       });
     }
-    if (!(await verifyTurnstile(request, parsed.data.turnstileToken ?? null))) {
-      throw new PublicAppError({
-        code: 'turnstile_failed',
-        status: 422,
-        publicMessage: 'Bezpečnostné overenie zlyhalo. Skúste to znova.',
-      });
+    const verifiedSession = await hasVerifiedFunnelSession(audit.id);
+    if (!verifiedSession) {
+      if (!parsed.data.turnstileToken) {
+        throw new PublicAppError({
+          code: 'verification_required',
+          status: 428,
+          publicMessage: 'Platnosť bezpečnostného overenia vypršala. Dokončite nové overenie a formulár odošlite znova.',
+        });
+      }
+      if (!(await verifyTurnstile(request, parsed.data.turnstileToken))) {
+        throw new PublicAppError({
+          code: 'turnstile_failed',
+          status: 422,
+          publicMessage: 'Bezpečnostné overenie zlyhalo. Skúste to znova.',
+        });
+      }
     }
 
     const ipSubject = await enforceRateLimit({
@@ -89,6 +101,30 @@ export async function POST(request: Request, context: { params: Promise<{ token:
       leadScore,
     });
 
+    const deliveryClaim = await claimLeadEmailDelivery(lead.id);
+    if (!deliveryClaim) {
+      await Promise.all([
+        recordSecurityEventSafe({
+          action: 'audit_unlock_ip',
+          subjectHash: ipSubject,
+          auditId: audit.id,
+          success: false,
+          metadata: { duplicateSuppressed: true },
+        }),
+        recordSecurityEventSafe({
+          action: 'audit_unlock_email',
+          subjectHash: emailSubject,
+          auditId: audit.id,
+          success: false,
+          metadata: { duplicateSuppressed: true },
+        }),
+      ]);
+      return NextResponse.json({
+        checkEmailUrl: `/audit/${encodeURIComponent(token)}/check-email`,
+        emailSent: true,
+      });
+    }
+
     const plainToken = randomToken(40);
     const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
     await createReportAccessToken({
@@ -103,7 +139,7 @@ export async function POST(request: Request, context: { params: Promise<{ token:
       to: parsed.data.email,
       subject: `Overte e-mail a otvorte výsledok pre ${audit.origin}`,
       html: auditResultEmail({ audit, accessUrl }),
-      idempotencyKey: `audit-result-v4-${audit.id}-${lead.id}-${Date.now()}`,
+      idempotencyKey: `audit-result-v5-${audit.id}-${lead.id}-${deliveryClaim.emailLastSentAt!.getTime()}`,
     });
     await markLeadEmailDelivery(lead.id, { sent: userMail.sent, reason: userMail.reason });
 

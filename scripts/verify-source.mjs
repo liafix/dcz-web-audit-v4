@@ -27,7 +27,7 @@ const secretPatterns = [
   { name: 'Resend API key', pattern: /\bre_[A-Za-z0-9_-]{20,}\b/ },
   { name: 'live Stripe secret', pattern: /\bsk_live_[A-Za-z0-9]+\b/ },
   { name: 'private key', pattern: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/ },
-  { name: 'configured secret assignment', pattern: /(?:TURNSTILE_SECRET_KEY|CRON_SECRET|ADMIN_SESSION_SECRET|ACCESS_COOKIE_SECRET|REQUEST_FINGERPRINT_SECRET|BOOKING_WEBHOOK_SECRET)\s*=\s*[^\s#]+/ },
+  { name: 'configured secret assignment', pattern: /(?:TURNSTILE_SECRET_KEY|FUNNEL_SESSION_SECRET|CRON_SECRET|ADMIN_SESSION_SECRET|ACCESS_COOKIE_SECRET|REQUEST_FINGERPRINT_SECRET|BOOKING_WEBHOOK_SECRET)\s*=\s*[^\s#]+/ },
 ];
 const textExtensions = new Set([
   '', '.css', '.html', '.json', '.js', '.jsx', '.md', '.mjs', '.ps1',
