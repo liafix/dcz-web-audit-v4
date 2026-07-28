@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { recordFunnelEventSafe, recordSecurityEventSafe } from '@/lib/analytics/funnel';
 import { appUrl } from '@/lib/env';
 import {
+  claimLeadResendDelivery,
   createReportAccessToken,
   findAuditByToken,
   findLeadForAuditEmail,
@@ -35,7 +36,10 @@ export async function POST(request: Request, context: { params: Promise<{ token:
     if (!parsed.success) {
       throw new PublicAppError({ code: 'invalid_email', status: 422, publicMessage: 'Zadajte platný e-mail.' });
     }
-    if (!(await verifyTurnstile(request, parsed.data.turnstileToken ?? null))) {
+    if (!(await verifyTurnstile(request, parsed.data.turnstileToken ?? null, {
+      expectedHostname: new URL(appUrl()).hostname,
+      expectedAction: 'audit_resend',
+    }))) {
       throw new PublicAppError({ code: 'turnstile_failed', status: 422, publicMessage: 'Bezpečnostné overenie zlyhalo.' });
     }
 
@@ -59,7 +63,8 @@ export async function POST(request: Request, context: { params: Promise<{ token:
       // Do not reveal whether an e-mail exists for this audit.
       return NextResponse.json({ success: true });
     }
-    if (lead.emailLastSentAt && Date.now() - lead.emailLastSentAt.getTime() < 60_000) {
+    const claimedLead = await claimLeadResendDelivery(lead.id);
+    if (!claimedLead) {
       throw new PublicAppError({
         code: 'resend_cooldown',
         status: 429,
@@ -70,17 +75,17 @@ export async function POST(request: Request, context: { params: Promise<{ token:
     const plainToken = randomToken(40);
     await createReportAccessToken({
       auditId: audit.id,
-      email: lead.email,
+      email: claimedLead.email,
       tokenHash: sha256(plainToken),
       expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000),
     });
     const sent = await sendEmail({
-      to: lead.email,
+      to: claimedLead.email,
       subject: `Výsledok auditu pre ${audit.origin}`,
       html: auditResultEmail({ audit, accessUrl: `${appUrl()}/access/${encodeURIComponent(plainToken)}` }),
-      idempotencyKey: `audit-resend-${audit.id}-${lead.id}-${Date.now()}`,
+      idempotencyKey: `audit-resend-${audit.id}-${claimedLead.id}-${claimedLead.emailLastSentAt?.toISOString() ?? 'claimed'}`,
     });
-    await markLeadEmailDelivery(lead.id, { sent: sent.sent, reason: sent.reason });
+    await markLeadEmailDelivery(claimedLead.id, { sent: sent.sent, reason: sent.reason });
     await Promise.all([
       recordSecurityEventSafe({ action: sent.sent ? 'audit_resend_success' : 'audit_resend_failed', subjectHash, auditId: audit.id, success: sent.sent }),
       recordFunnelEventSafe({ auditId: audit.id, event: sent.sent ? 'result_email_resent' : 'result_email_resend_failed' }),

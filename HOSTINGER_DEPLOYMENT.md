@@ -76,6 +76,15 @@ least 32 bytes. Production URLs must use HTTPS. Never commit or place secret val
 issues, documentation, or release ZIPs. Public `NEXT_PUBLIC_*` variables are embedded at build
 time, so changing them requires redeployment.
 
+For Turnstile, the build and runtime configuration must agree:
+
+- build with the intended `NEXT_PUBLIC_TURNSTILE_SITE_KEY`; changing it in hPanel without rebuilding is insufficient,
+- keep `TURNSTILE_ENABLED=true` and the matching secret at runtime,
+- bind Cloudflare to the canonical hostname (plus an intentional staging hostname where applicable),
+- preserve the form action matrix `audit_start`, `audit_unlock`, `audit_resend`, `manual_review`, and `admin_login`,
+- do not cache or transform the Cloudflare Turnstile script through HCDN, and keep CSP access to Cloudflare script, frame, and verification endpoints,
+- record the exact deployed commit SHA, build time, hostname, and only a non-sensitive Site Key suffix in the QA evidence.
+
 ## Database migration
 
 The application does not migrate the database during startup.
@@ -144,6 +153,28 @@ Hostinger, DNS, Search Console, analytics, or any other external system.
 - Use Hostinger deployment/runtime logs and the configured HTTPS monitoring webhook.
 - Application error messages, stack output, e-mail addresses, credentials, tokens, and query
   strings are redacted or bounded before logging.
+- Siteverify diagnostics may retain only bounded status, sanitized error codes, returned
+  hostname/action, and the mismatch classification. Never log the response token, secret, or
+  raw upstream body.
+
+## Turnstile and funnel smoke test
+
+After every staging or production build:
+
+1. Exercise audit start, expired-session unlock fallback, resend, manual review, and admin login.
+2. Confirm each form renders one widget, keeps it across unrelated React re-renders, and never
+   submits automatically after a token or recovery.
+3. Simulate blocked script, script error, expiry, timeout, and offline submission. The UI must
+   distinguish loading/interaction/recovery states and permit a guarded re-render.
+4. Confirm a submitted token is cleared before the request and cannot be reused after any
+   response or network ambiguity.
+5. Confirm Siteverify rejects a deliberately wrong hostname/action in staging test fixtures.
+6. Run two concurrent unlock and resend attempts: only one access token and one e-mail attempt
+   may be produced for each atomic delivery claim.
+7. Confirm magic-link GET is inert, POST confirmation is one-time, and downstream routing or
+   notification failure cannot revoke the confirmed report cookie.
+8. Confirm a rejected `/process` request shows a warning without an unhandled promise, while
+   status polling and bounded retry remain operational.
 
 ## Audit timeout validation
 

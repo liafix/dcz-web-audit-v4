@@ -292,7 +292,7 @@ export async function markLeadEmailDelivery(
     .update(leads)
     .set({
       emailLastSentAt: new Date(),
-      emailDeliveryStatus: input.sent ? 'sent' : 'failed',
+      emailDeliveryStatus: sql`case when ${leads.emailVerifiedAt} is not null then 'verified' else ${input.sent ? 'sent' : 'failed'} end`,
       emailDeliveryError: input.sent ? null : (input.reason ?? 'email_provider_failed').slice(0, 240),
       updatedAt: new Date(),
     })
@@ -321,6 +321,33 @@ export async function claimLeadEmailDelivery(leadId: string): Promise<LeadRecord
             eq(leads.emailDeliveryStatus, 'pending'),
             lt(leads.emailLastSentAt, abandonedBefore),
           ),
+        ),
+      ),
+    )
+    .returning();
+  return record ?? null;
+}
+
+export async function claimLeadResendDelivery(
+  leadId: string,
+  cooldownMs = 60_000,
+): Promise<LeadRecord | null> {
+  const now = new Date();
+  const cooldownBefore = new Date(now.getTime() - cooldownMs);
+  const [record] = await db()
+    .update(leads)
+    .set({
+      emailLastSentAt: now,
+      emailDeliveryStatus: sql`case when ${leads.emailVerifiedAt} is not null then 'verified' else 'pending' end`,
+      emailDeliveryError: null,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(leads.id, leadId),
+        or(
+          isNull(leads.emailLastSentAt),
+          lt(leads.emailLastSentAt, cooldownBefore),
         ),
       ),
     )
@@ -452,6 +479,62 @@ export async function confirmReportAccessToken(
     )
     .returning({ auditId: reportAccessTokens.auditId, email: reportAccessTokens.email });
   return record ?? null;
+}
+
+export async function confirmReportAccessAndVerifyLead(
+  tokenHash: string,
+): Promise<{ auditId: string; email: string; leadId: string } | null> {
+  const result = await db().execute<{
+    auditId: string;
+    email: string;
+    leadId: string;
+  }>(sql`
+    with eligible as (
+      select
+        ${reportAccessTokens.id} as token_id,
+        ${reportAccessTokens.auditId} as audit_id,
+        ${reportAccessTokens.email} as email
+      from ${reportAccessTokens}
+      where ${reportAccessTokens.tokenHash} = ${tokenHash}
+        and ${reportAccessTokens.expiresAt} > now()
+        and ${reportAccessTokens.revokedAt} is null
+        and ${reportAccessTokens.usedAt} is null
+      for update
+    ),
+    verified as (
+      update ${leads}
+      set
+        email_verified_at = now(),
+        stage = case
+          when ${leads.stage} in ('new', 'pending_email_verification') then 'verified'
+          else ${leads.stage}
+        end,
+        email_delivery_status = 'verified',
+        updated_at = now()
+      from eligible
+      where ${leads.auditId} = eligible.audit_id
+        and ${leads.email} = eligible.email
+        and ${leads.source} = 'audit_unlock'
+      returning ${leads.id} as lead_id
+    ),
+    consumed as (
+      update ${reportAccessTokens}
+      set used_at = now()
+      from eligible
+      where ${reportAccessTokens.id} = eligible.token_id
+        and exists (select 1 from verified)
+      returning
+        ${reportAccessTokens.auditId} as audit_id,
+        ${reportAccessTokens.email} as email
+    )
+    select
+      consumed.audit_id as "auditId",
+      consumed.email as email,
+      verified.lead_id as "leadId"
+    from consumed
+    cross join verified
+  `);
+  return result.rows[0] ?? null;
 }
 
 export async function recordFunnelEvent(input: {

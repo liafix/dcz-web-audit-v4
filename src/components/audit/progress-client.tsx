@@ -41,6 +41,7 @@ export function ProgressClient({ token, initialStatus }: { token: string; initia
   const retryCooldownUntil = useRef(0);
   const [payload, setPayload] = useState<AuditStatusPayload>(() => emptyPayload(initialStatus));
   const [networkWarning, setNetworkWarning] = useState(false);
+  const [processingWarning, setProcessingWarning] = useState(false);
 
   const triggerProcessing = useCallback(async () => {
     if (processing.current || Date.now() < retryCooldownUntil.current) return false;
@@ -51,7 +52,12 @@ export function ProgressClient({ token, initialStatus }: { token: string; initia
         method: 'POST',
         cache: 'no-store',
       });
-      return response.ok || response.status === 409;
+      const accepted = response.ok || response.status === 409;
+      setProcessingWarning(!accepted);
+      return accepted;
+    } catch {
+      setProcessingWarning(true);
+      return false;
     } finally {
       processing.current = false;
     }
@@ -128,12 +134,17 @@ export function ProgressClient({ token, initialStatus }: { token: string; initia
       </CardContent></Card>
 
       {networkWarning && <p role="status" className="rounded-xl border border-amber-300/20 bg-amber-400/8 px-4 py-3 text-sm text-amber-100">Spojenie je nestabilné. Stav auditu skúšame načítať znova.</p>}
+      {processingWarning && <p role="alert" className="rounded-xl border border-amber-300/20 bg-amber-400/8 px-4 py-3 text-sm text-amber-100">Spracovanie sa nepodarilo spustiť. Stav auditu ďalej kontrolujeme; ak je pokus dostupný, môžete ho bezpečne zopakovať.</p>}
       {payload.failed && <Card className="border-red-300/20"><CardContent>
         <h2 className="text-xl font-semibold text-white">Audit sa nepodarilo dokončiť</h2>
         <p className="mt-3 text-sm leading-6 text-slate-400">{payload.message ?? 'Skúste spracovanie zopakovať alebo kontaktujte DCZ.'}</p>
         {payload.errorId && <p className="mt-2 text-xs text-slate-600">ID chyby: {payload.errorId}</p>}
         <div className="mt-5 flex flex-wrap gap-3">
-          {payload.retryable && payload.attemptCount < payload.maxAttempts && <Button type="button" onClick={() => void triggerProcessing().then(() => window.location.reload())}>Skúsiť znova</Button>}
+          {payload.retryable && payload.attemptCount < payload.maxAttempts && <Button type="button" onClick={() => {
+            void triggerProcessing().then((accepted) => {
+              if (accepted) window.location.reload();
+            });
+          }}>Skúsiť znova</Button>}
           <Link href={`/contact?audit=${encodeURIComponent(token)}`} className={buttonClass('secondary')}>Kontaktovať DCZ</Link>
         </div>
       </CardContent></Card>}

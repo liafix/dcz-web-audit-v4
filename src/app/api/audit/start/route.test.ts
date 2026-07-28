@@ -156,7 +156,7 @@ describe('POST /api/audit/start Turnstile diagnostics', () => {
         siteverifyErrorCodes: ['timeout-or-duplicate'],
         expectedHostname: 'dczweb.com',
         returnedHostname: 'dczweb.com',
-        expectedAction: null,
+        expectedAction: 'audit_start',
         returnedAction: null,
         failureClassification: 'siteverify_rejected',
       },

@@ -11,6 +11,7 @@
 - [ ] Strict staged-release verification passes.
 - [ ] Manifest, ZIP, and SHA-256 are generated and verified.
 - [ ] GitHub Actions is green for the exact deployment commit.
+- [ ] Exact deployed commit SHA and build timestamp are recorded; no uncommitted workspace is deployed.
 
 ## Git and secrets
 
@@ -46,6 +47,10 @@
 - [ ] Neon TLS connection works.
 - [ ] Resend sender domain, SPF, DKIM, and DMARC are reviewed.
 - [ ] Turnstile is enabled and verified in production.
+- [ ] `NEXT_PUBLIC_TURNSTILE_SITE_KEY` was present during the exact production build (public value only; record at most its final eight characters).
+- [ ] Cloudflare Turnstile hostname allowlist contains the canonical production hostname and intentional staging hostname only.
+- [ ] Siteverify enforces the exact canonical hostname and action matrix: `audit_start`, `audit_unlock`, `audit_resend`, `manual_review`, `admin_login`.
+- [ ] HCDN/proxy does not cache, rewrite, block, or defer `https://challenges.cloudflare.com/turnstile/v0/api.js`; CSP permits the Turnstile script/frame/connect origins.
 - [ ] Funnel cookie is HttpOnly, Secure, SameSite=Lax, Path=/ and expires after 25 minutes.
 - [ ] Monitoring webhook receives a redacted test event.
 - [ ] Booking URL and webhook/manual fallback work.
@@ -54,6 +59,9 @@
 
 - [ ] URL → progress → Executive Preview → Money Leak Map.
 - [ ] E-mail unlock → POST confirmation → full report.
+- [ ] Turnstile loading/error/expiry/timeout recovery works without automatic resubmission or duplicate widgets.
+- [ ] Atomic resend cooldown permits one concurrent sender and uses the claimed timestamp as provider idempotency input.
+- [ ] Magic-link POST validates the audit before consumption, then atomically consumes the token and verifies the audit-bound lead.
 - [ ] ROI → three qualification questions → contextual offer → case study.
 - [ ] Booking → Opportunity Brief → admin routing.
 - [ ] Fit/Intent scoring and Priority A notification.

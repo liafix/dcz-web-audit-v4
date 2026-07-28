@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { recordSecurityEventSafe } from '@/lib/analytics/funnel';
 import { createAdminSession, verifyAdminPassword } from '@/lib/auth/admin-session';
+import { appUrl } from '@/lib/env';
 import { PublicAppError } from '@/lib/errors/public-error';
 import { readJsonBody } from '@/lib/http/request';
 import { jsonError } from '@/lib/http/response';
@@ -19,7 +20,10 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       throw new PublicAppError({ code: 'invalid_admin_login', status: 422, publicMessage: 'Neplatné prihlasovacie údaje.' });
     }
-    if (!(await verifyTurnstile(request, parsed.data.turnstileToken ?? null))) {
+    if (!(await verifyTurnstile(request, parsed.data.turnstileToken ?? null, {
+      expectedHostname: new URL(appUrl()).hostname,
+      expectedAction: 'admin_login',
+    }))) {
       throw new PublicAppError({ code: 'turnstile_failed', status: 422, publicMessage: 'Bezpečnostné overenie zlyhalo.' });
     }
 

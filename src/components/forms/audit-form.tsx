@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
+import { TurnstileStatus } from '@/components/forms/turnstile-status';
 import { TurnstileWidget } from '@/components/forms/turnstile-widget';
 import { useTurnstileAttempt } from '@/components/forms/use-turnstile-attempt';
 import { Button } from '@/components/ui/button';
@@ -37,7 +38,15 @@ export function AuditForm({
     event.preventDefault(); setError(null); track('audit_submit_attempted');
     const attempt = turnstile.begin(Boolean(siteKey));
     if (attempt.status === 'busy') return;
-    if (attempt.status === 'missing') return setError('Dokončite viditeľné bezpečnostné overenie a odošlite formulár znova.');
+    if (attempt.status !== 'started') {
+      return setError(
+        attempt.status === 'interaction_required'
+          ? 'Dokončite zobrazené bezpečnostné overenie.'
+          : attempt.status === 'recoverable'
+            ? 'Obnovte bezpečnostné overenie a dokončite ho znova.'
+            : 'Počkajte, kým sa bezpečnostné overenie pripraví.',
+      );
+    }
     try {
       const searchParams = new URLSearchParams(window.location.search);
       const response = await fetch('/api/audit/start', {
@@ -57,11 +66,6 @@ export function AuditForm({
     }
   }
 
-  const challengeIssue = (message: string) => {
-    turnstile.clearChallenge();
-    setError(message);
-  };
-
   return <form onSubmit={submit} className={isHero ? 'premium-audit-form' : 'space-y-4'} noValidate aria-busy={turnstile.pending}>
     <div className={isHero ? 'premium-audit-form__row' : isCompact ? 'grid gap-3 md:grid-cols-[1fr_auto]' : 'space-y-3'}>
       <div className={isHero ? 'premium-audit-form__field' : undefined}>
@@ -70,7 +74,7 @@ export function AuditForm({
         <Input id="audit-url" inputMode="url" autoComplete="url" required value={url} onFocus={() => track('url_field_focused')} onChange={(event) => setUrl(event.target.value)} placeholder="https://vasweb.sk" aria-describedby={error ? 'audit-error' : 'audit-help'} className={isHero ? 'premium-audit-form__input' : undefined} />
         <input tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" value={website} onChange={(event) => setWebsite(event.target.value)} name="website" />
       </div>
-      <Button type="submit" disabled={turnstile.pending} variant={isHero ? 'accent' : 'primary'} className={isHero ? 'premium-audit-form__submit' : isCompact ? 'md:min-w-52' : 'w-full'}>
+      <Button type="submit" disabled={turnstile.pending || (Boolean(siteKey) && !turnstile.canSubmit)} variant={isHero ? 'accent' : 'primary'} className={isHero ? 'premium-audit-form__submit' : isCompact ? 'md:min-w-52' : 'w-full'}>
         {turnstile.pending ? 'Spúšťame diagnostiku…' : 'Analyzovať obchodné bariéry'}
         {isHero && !turnstile.pending && <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20" className="premium-button-arrow"><path d="m7 4 6 6-6 6" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" /></svg>}
       </Button>
@@ -78,12 +82,12 @@ export function AuditForm({
     <TurnstileWidget
       ref={turnstile.widgetRef}
       siteKey={siteKey}
+      action="audit_start"
       onToken={turnstile.onToken}
+      onStateChange={turnstile.onStateChange}
       responsive={isHero}
-      onExpired={() => challengeIssue('Platnosť bezpečnostného overenia vypršala. Dokončite ho znova.')}
-      onError={() => challengeIssue('Bezpečnostné overenie sa nepodarilo načítať. Skúste ho znova.')}
-      onTimeout={() => challengeIssue('Bezpečnostné overenie vypršalo pre nečinnosť. Dokončite ho znova.')}
     />
+    {siteKey && <TurnstileStatus phase={turnstile.phase} onRecover={turnstile.recover} />}
     <p id="audit-help" className={isHero ? 'premium-audit-form__help' : 'text-xs leading-5 text-slate-500'}>Kontrolujeme iba verejne dostupné signály titulnej stránky. Neprihlasujeme sa, neodosielame formuláre ani nevykonávame zásahy do webu.</p>
     {error && <p id="audit-error" role="alert" className="rounded-xl border border-red-400/25 bg-red-400/8 px-4 py-3 text-sm text-red-200">{error}</p>}
   </form>;

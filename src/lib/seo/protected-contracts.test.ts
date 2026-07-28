@@ -10,13 +10,19 @@ describe('protected funnel and indexing contracts', () => {
     expect(auditForm).toContain('router.push(`/audit/${encodeURIComponent(data.token)}/progress`)');
     expect(auditForm).toContain('ref={turnstile.widgetRef}');
     expect(auditForm).toContain('onToken={turnstile.onToken}');
+    expect(auditForm).toContain('onStateChange={turnstile.onStateChange}');
+    expect(auditForm).toContain('action="audit_start"');
     expect(auditForm).toContain('responsive={isHero}');
     expect(turnstile).toContain('https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit');
-    expect(turnstile).toContain("callback: (token) => onToken(token)");
+    expect(turnstile).toContain('tokenCallbackRef.current(token)');
+    expect(turnstile).toContain("publishState('verified')");
     expect(turnstile).toContain("'expired-callback': () => {");
     expect(turnstile).toContain("'error-callback': () => {");
     expect(turnstile).toContain("'timeout-callback': () => {");
-    expect(turnstile).toContain('window.turnstile.reset(widgetIdRef.current)');
+    expect(turnstile).toContain('window.turnstile.reset(owned.id)');
+    expect(turnstile).toContain('widgetRef.current = null');
+    expect(turnstile).toContain('onReady={() => {');
+    expect(turnstile).toContain('onError={() => {');
   });
 
   it('preserves private X-Robots-Tag and no-store route groups', async () => {

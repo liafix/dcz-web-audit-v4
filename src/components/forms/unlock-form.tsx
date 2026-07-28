@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
+import { TurnstileStatus } from '@/components/forms/turnstile-status';
 import { TurnstileWidget } from '@/components/forms/turnstile-widget';
 import { useTurnstileAttempt } from '@/components/forms/use-turnstile-attempt';
 import { Button } from '@/components/ui/button';
@@ -28,7 +29,15 @@ export function UnlockForm({ token, funnelVerified = false }: { token: string; f
     setError(null);
     const attempt = turnstile.begin(verificationRequired && Boolean(siteKey));
     if (attempt.status === 'busy') return;
-    if (attempt.status === 'missing') return setError('Dokončite viditeľné bezpečnostné overenie a formulár odošlite znova.');
+    if (attempt.status !== 'started') {
+      return setError(
+        attempt.status === 'interaction_required'
+          ? 'Dokončite zobrazené bezpečnostné overenie.'
+          : attempt.status === 'recoverable'
+            ? 'Obnovte bezpečnostné overenie a dokončite ho znova.'
+            : 'Počkajte, kým sa bezpečnostné overenie pripraví.',
+      );
+    }
     const form = new FormData(event.currentTarget);
     try {
       const response = await fetch(`/api/audit/${encodeURIComponent(token)}/unlock`, {
@@ -60,11 +69,6 @@ export function UnlockForm({ token, funnelVerified = false }: { token: string; f
     }
   }
 
-  const challengeIssue = (message: string) => {
-    turnstile.clearChallenge();
-    setError(message);
-  };
-
   return (
     <form onSubmit={submit} className="space-y-4" noValidate>
       <div className="grid gap-4 md:grid-cols-2">
@@ -95,18 +99,18 @@ export function UnlockForm({ token, funnelVerified = false }: { token: string; f
           <TurnstileWidget
             ref={turnstile.widgetRef}
             siteKey={siteKey}
+            action="audit_unlock"
             onToken={turnstile.onToken}
-            onExpired={() => challengeIssue('Platnosť bezpečnostného overenia vypršala. Dokončite ho znova.')}
-            onError={() => challengeIssue('Bezpečnostné overenie sa nepodarilo načítať. Skúste ho znova.')}
-            onTimeout={() => challengeIssue('Bezpečnostné overenie vypršalo pre nečinnosť. Dokončite ho znova.')}
+            onStateChange={turnstile.onStateChange}
           />
+          {siteKey && <TurnstileStatus phase={turnstile.phase} onRecover={turnstile.recover} />}
         </div>
       ) : (
         <p className="rounded-xl border border-emerald-300/20 bg-emerald-400/8 px-4 py-3 text-sm text-emerald-100">
           Bezpečnostné overenie z úvodného kroku je stále platné pre tento audit.
         </p>
       )}
-      <Button type="submit" disabled={turnstile.pending} className="w-full">
+      <Button type="submit" disabled={turnstile.pending || (verificationRequired && Boolean(siteKey) && !turnstile.canSubmit)} className="w-full">
         {turnstile.pending ? 'Odosielame bezpečný odkaz…' : 'Poslať celý výsledok e-mailom'}
       </Button>
       <p className="text-xs leading-5 text-slate-500">

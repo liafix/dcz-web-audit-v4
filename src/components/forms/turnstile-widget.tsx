@@ -10,21 +10,46 @@ import {
   useState,
 } from 'react';
 
+export type TurnstileLifecycleState =
+  | 'script_not_requested'
+  | 'script_loading'
+  | 'script_ready'
+  | 'widget_rendering'
+  | 'widget_visible'
+  | 'verifying'
+  | 'verified'
+  | 'expired'
+  | 'timed_out'
+  | 'client_error'
+  | 'unavailable'
+  | 'resetting'
+  | 'rerendering';
+
+interface TurnstileRenderOptions {
+  sitekey: string;
+  action: string;
+  theme: 'dark';
+  size?: 'compact' | 'flexible';
+  appearance: 'interaction-only';
+  execution: 'render';
+  retry: 'auto';
+  'retry-interval': number;
+  'refresh-expired': 'auto';
+  'refresh-timeout': 'auto';
+  'response-field': false;
+  callback: (token: string) => void;
+  'expired-callback': () => void;
+  'error-callback': (code?: string) => void;
+  'timeout-callback': () => void;
+  'before-interactive-callback': () => void;
+  'after-interactive-callback': () => void;
+  'unsupported-callback': () => void;
+}
+
 declare global {
   interface Window {
     turnstile?: {
-      render: (
-        container: HTMLElement,
-        options: {
-          sitekey: string;
-          theme?: 'dark' | 'light' | 'auto';
-          size?: 'compact' | 'flexible' | 'normal';
-          callback: (token: string) => void;
-          'expired-callback': () => void;
-          'error-callback': () => void;
-          'timeout-callback': () => void;
-        },
-      ) => string;
+      render: (container: HTMLElement, options: TurnstileRenderOptions) => string;
       remove: (widgetId: string) => void;
       reset: (widgetId: string) => void;
     };
@@ -33,81 +58,264 @@ declare global {
 
 export interface TurnstileWidgetHandle {
   reset: () => void;
+  recover: () => void;
 }
 
-export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, {
+interface TurnstileWidgetProps {
   siteKey?: string;
+  action: string;
   onToken: (token: string | null) => void;
+  onStateChange: (state: TurnstileLifecycleState) => void;
   responsive?: boolean;
-  onExpired?: () => void;
-  onError?: () => void;
-  onTimeout?: () => void;
-}>(function TurnstileWidget({
-  siteKey,
-  onToken,
-  responsive = false,
-  onExpired,
-  onError,
-  onTimeout,
-}, ref) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const widgetIdRef = useRef<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
+}
 
-  const renderWidget = useCallback(() => {
-    if (!siteKey || !loaded || !containerRef.current || !window.turnstile) return;
-    if (widgetIdRef.current) window.turnstile.remove(widgetIdRef.current);
-    const availableWidth = containerRef.current.getBoundingClientRect().width;
-    widgetIdRef.current = window.turnstile.render(containerRef.current, {
-      sitekey: siteKey,
-      theme: 'dark',
-      ...(responsive
-        ? { size: availableWidth > 0 && availableWidth < 300 ? 'compact' as const : 'flexible' as const }
-        : {}),
-      callback: (token) => onToken(token),
-      'expired-callback': () => {
-        onToken(null);
-        onExpired?.();
-      },
-      'error-callback': () => {
-        onToken(null);
-        onError?.();
-      },
-      'timeout-callback': () => {
-        onToken(null);
-        onTimeout?.();
-      },
-    });
-  }, [loaded, onError, onExpired, onTimeout, onToken, responsive, siteKey]);
+const SCRIPT_ID = 'cloudflare-turnstile-script';
+const SCRIPT_URL = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+const SCRIPT_READY_TIMEOUT_MS = 12_000;
+const WIDGET_PRESENCE_TIMEOUT_MS = 1_500;
 
-  useImperativeHandle(ref, () => ({
-    reset() {
-      onToken(null);
-      if (widgetIdRef.current && window.turnstile) {
-        window.turnstile.reset(widgetIdRef.current);
+export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidgetProps>(
+  function TurnstileWidget(
+    { siteKey, action, onToken, onStateChange, responsive = false },
+    ref,
+  ) {
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const widgetRef = useRef<{ id: string; generation: number } | null>(null);
+    const generationRef = useRef(0);
+    const tokenCallbackRef = useRef(onToken);
+    const stateCallbackRef = useRef(onStateChange);
+    const mountedRef = useRef(false);
+    const [scriptReady, setScriptReady] = useState(false);
+    const [scriptAttempt, setScriptAttempt] = useState(0);
+    const [renderRequest, setRenderRequest] = useState(0);
+
+    useEffect(() => {
+      tokenCallbackRef.current = onToken;
+    }, [onToken]);
+
+    useEffect(() => {
+      stateCallbackRef.current = onStateChange;
+    }, [onStateChange]);
+
+    const publishState = useCallback((state: TurnstileLifecycleState) => {
+      if (mountedRef.current) stateCallbackRef.current(state);
+    }, []);
+
+    const clearToken = useCallback(() => {
+      tokenCallbackRef.current(null);
+    }, []);
+
+    const removeOwnedWidget = useCallback((expectedGeneration?: number) => {
+      const owned = widgetRef.current;
+      if (!owned || (expectedGeneration !== undefined && owned.generation !== expectedGeneration)) {
+        return;
       }
-    },
-  }), [onToken]);
 
-  useEffect(() => {
-    renderWidget();
-    return () => {
-      if (widgetIdRef.current && window.turnstile) {
-        window.turnstile.remove(widgetIdRef.current);
+      widgetRef.current = null;
+      generationRef.current += 1;
+      try {
+        window.turnstile?.remove(owned.id);
+      } catch {
+        // A stale Cloudflare handle is already detached. The local ownership is cleared first.
       }
-    };
-  }, [renderWidget]);
+    }, []);
 
-  if (!siteKey) return null;
+    const requestRerender = useCallback((state: 'resetting' | 'rerendering') => {
+      clearToken();
+      publishState(state);
+      removeOwnedWidget();
+      if (window.turnstile) {
+        setScriptReady(true);
+        setRenderRequest((value) => value + 1);
+        return;
+      }
 
-  return (
-    <>
-      <Script
-        src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-        strategy="afterInteractive"
-        onLoad={() => setLoaded(true)}
-      />
-      <div ref={containerRef} className={responsive ? 'turnstile-slot' : 'min-h-16'} aria-label="Bezpečnostné overenie" />
-    </>
-  );
-});
+      setScriptReady(false);
+      setScriptAttempt((value) => value + 1);
+      publishState('script_loading');
+    }, [clearToken, publishState, removeOwnedWidget]);
+
+    useImperativeHandle(ref, () => ({
+      reset() {
+        clearToken();
+        const owned = widgetRef.current;
+        if (!owned || !window.turnstile) {
+          requestRerender('resetting');
+          return;
+        }
+
+        publishState('resetting');
+        try {
+          window.turnstile.reset(owned.id);
+          publishState('widget_rendering');
+        } catch {
+          requestRerender('rerendering');
+        }
+      },
+      recover() {
+        requestRerender('rerendering');
+      },
+    }), [clearToken, publishState, requestRerender]);
+
+    useEffect(() => {
+      mountedRef.current = true;
+      if (!siteKey) {
+        publishState('unavailable');
+        return () => {
+          mountedRef.current = false;
+        };
+      }
+
+      if (window.turnstile) {
+        setScriptReady(true);
+        publishState('script_ready');
+      } else {
+        publishState('script_loading');
+      }
+
+      return () => {
+        mountedRef.current = false;
+        removeOwnedWidget();
+      };
+    }, [publishState, removeOwnedWidget, siteKey]);
+
+    useEffect(() => {
+      if (!siteKey || scriptReady || window.turnstile) return;
+
+      const timeoutId = window.setTimeout(() => {
+        if (!window.turnstile) publishState('unavailable');
+      }, SCRIPT_READY_TIMEOUT_MS);
+      return () => window.clearTimeout(timeoutId);
+    }, [publishState, scriptAttempt, scriptReady, siteKey]);
+
+    useEffect(() => {
+      if (!siteKey || !scriptReady || !containerRef.current) return;
+      const turnstile = window.turnstile;
+      if (!turnstile) {
+        publishState('unavailable');
+        return;
+      }
+
+      removeOwnedWidget();
+      const generation = generationRef.current + 1;
+      generationRef.current = generation;
+      publishState(renderRequest > 0 ? 'rerendering' : 'widget_rendering');
+
+      const isCurrent = () => (
+        mountedRef.current
+        && widgetRef.current?.generation === generation
+      );
+
+      try {
+        const availableWidth = containerRef.current.getBoundingClientRect().width;
+        const id = turnstile.render(containerRef.current, {
+          sitekey: siteKey,
+          action,
+          theme: 'dark',
+          ...(responsive
+            ? {
+                size: availableWidth > 0 && availableWidth < 300
+                  ? 'compact' as const
+                  : 'flexible' as const,
+              }
+            : {}),
+          appearance: 'interaction-only',
+          execution: 'render',
+          retry: 'auto',
+          'retry-interval': 8_000,
+          'refresh-expired': 'auto',
+          'refresh-timeout': 'auto',
+          'response-field': false,
+          callback: (token) => {
+            if (!isCurrent()) return;
+            tokenCallbackRef.current(token);
+            publishState('verified');
+          },
+          'expired-callback': () => {
+            if (!isCurrent()) return;
+            clearToken();
+            publishState('expired');
+          },
+          'error-callback': () => {
+            if (!isCurrent()) return;
+            clearToken();
+            publishState('client_error');
+          },
+          'timeout-callback': () => {
+            if (!isCurrent()) return;
+            clearToken();
+            publishState('timed_out');
+          },
+          'before-interactive-callback': () => {
+            if (isCurrent()) publishState('widget_visible');
+          },
+          'after-interactive-callback': () => {
+            if (isCurrent()) publishState('verifying');
+          },
+          'unsupported-callback': () => {
+            if (!isCurrent()) return;
+            clearToken();
+            publishState('unavailable');
+          },
+        });
+        widgetRef.current = { id, generation };
+
+        const presenceTimeout = window.setTimeout(() => {
+          if (!isCurrent() || containerRef.current?.querySelector('iframe')) return;
+          clearToken();
+          publishState('client_error');
+        }, WIDGET_PRESENCE_TIMEOUT_MS);
+
+        return () => {
+          window.clearTimeout(presenceTimeout);
+          removeOwnedWidget(generation);
+        };
+      } catch {
+        if (generationRef.current === generation) {
+          clearToken();
+          publishState('client_error');
+        }
+      }
+    }, [
+      action,
+      clearToken,
+      publishState,
+      removeOwnedWidget,
+      renderRequest,
+      responsive,
+      scriptReady,
+      siteKey,
+    ]);
+
+    if (!siteKey) return null;
+
+    return (
+      <>
+        <Script
+          key={scriptAttempt}
+          id={scriptAttempt === 0 ? SCRIPT_ID : `${SCRIPT_ID}-${scriptAttempt}`}
+          src={scriptAttempt === 0 ? SCRIPT_URL : `${SCRIPT_URL}&retry=${scriptAttempt}`}
+          strategy="afterInteractive"
+          onReady={() => {
+            if (!window.turnstile) {
+              publishState('unavailable');
+              return;
+            }
+            setScriptReady(true);
+            publishState('script_ready');
+          }}
+          onError={() => {
+            setScriptReady(false);
+            clearToken();
+            publishState('unavailable');
+          }}
+        />
+        <div
+          ref={containerRef}
+          className={responsive ? 'turnstile-slot' : 'min-h-16'}
+          aria-label="Bezpečnostné overenie"
+        />
+      </>
+    );
+  },
+);

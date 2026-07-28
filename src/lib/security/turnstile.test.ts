@@ -75,6 +75,55 @@ describe('Turnstile Siteverify diagnostics', () => {
     expect(JSON.stringify(verification)).not.toContain(TEST_SECRET);
   });
 
+  it.each([
+    [
+      { expectedHostname: 'dczweb.com', expectedAction: 'audit_start' },
+      { hostname: 'attacker.example', action: 'audit_start' },
+      'siteverify_hostname_mismatch',
+    ],
+    [
+      { expectedHostname: 'dczweb.com', expectedAction: 'audit_unlock' },
+      { hostname: 'dczweb.com', action: 'audit_start' },
+      'siteverify_action_mismatch',
+    ],
+  ] as const)('fails closed when hostname or action binding differs', async (
+    expected,
+    returned,
+    failureClassification,
+  ) => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ success: true, ...returned }));
+
+    await expect(verifyTurnstileDetailed(request(), TEST_TOKEN, expected)).resolves.toEqual({
+      siteverifyHttpStatus: 200,
+      success: false,
+      errorCodes: [],
+      returnedHostname: returned.hostname,
+      returnedAction: returned.action,
+      failureClassification,
+    });
+  });
+
+  it('retries one transient Siteverify failure with one idempotency key', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response('temporary', { status: 503 }))
+      .mockResolvedValueOnce(jsonResponse({
+        success: true,
+        hostname: 'dczweb.com',
+        action: 'audit_resend',
+      }));
+
+    await expect(verifyTurnstileDetailed(request(), TEST_TOKEN, {
+      expectedHostname: 'dczweb.com',
+      expectedAction: 'audit_resend',
+    })).resolves.toMatchObject({ success: true, failureClassification: null });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const firstBody = fetchMock.mock.calls[0]?.[1]?.body as URLSearchParams;
+    const secondBody = fetchMock.mock.calls[1]?.[1]?.body as URLSearchParams;
+    expect(firstBody.get('idempotency_key')).toMatch(/^[0-9a-f-]{36}$/);
+    expect(secondBody.get('idempotency_key')).toBe(firstBody.get('idempotency_key'));
+    expect(firstBody.get('response')).toBe(TEST_TOKEN);
+  });
+
   it.each(['timeout-or-duplicate', 'invalid-input-response'])(
     'retains the sanitized %s rejection code',
     async (errorCode) => {
@@ -138,7 +187,7 @@ describe('Turnstile Siteverify diagnostics', () => {
   });
 
   it('fails closed on a non-2xx Siteverify response', async () => {
-    fetchMock.mockResolvedValueOnce(new Response('upstream unavailable', { status: 503 }));
+    fetchMock.mockResolvedValue(new Response('upstream unavailable', { status: 503 }));
 
     await expect(verifyTurnstileDetailed(request(), TEST_TOKEN)).resolves.toEqual({
       siteverifyHttpStatus: 503,
@@ -182,7 +231,7 @@ describe('Turnstile Siteverify diagnostics', () => {
   });
 
   it('fails closed and classifies a request timeout without retaining the error', async () => {
-    fetchMock.mockRejectedValueOnce(new DOMException(`timeout ${TEST_SECRET}`, 'TimeoutError'));
+    fetchMock.mockRejectedValue(new DOMException(`timeout ${TEST_SECRET}`, 'TimeoutError'));
 
     const verification = await verifyTurnstileDetailed(request(), TEST_TOKEN);
 
@@ -198,7 +247,7 @@ describe('Turnstile Siteverify diagnostics', () => {
   });
 
   it('fails closed and classifies a network rejection without retaining the error', async () => {
-    fetchMock.mockRejectedValueOnce(new TypeError(`network ${TEST_SECRET} ${TEST_TOKEN}`));
+    fetchMock.mockRejectedValue(new TypeError(`network ${TEST_SECRET} ${TEST_TOKEN}`));
 
     const verification = await verifyTurnstileDetailed(request(), TEST_TOKEN);
 

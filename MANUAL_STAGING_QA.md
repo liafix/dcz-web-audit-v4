@@ -17,8 +17,17 @@
 
 - [ ] Homepage sa načíta bez client/server chyby.
 - [ ] URL formulár prijme platnú verejnú HTTPS URL.
+- [ ] Turnstile prejde stavmi načítanie → render → overenie bez miznutia iframe pri písaní, validácii alebo inom parent re-renderi.
+- [ ] Už načítaný globálny `window.turnstile` funguje po client navigácii aj bez nového `load` eventu.
+- [ ] Blokovaný alebo chybový Turnstile script zobrazí stav „nedostupné“ a ovládateľné tlačidlo „Obnoviť overenie“.
+- [ ] `expired`, `timeout`, `error` a chýbajúci iframe majú viditeľný recovery stav; reset s neplatným widget ID bezpečne vytvorí práve jeden nový widget.
+- [ ] Žiadny recovery krok ani získanie tokenu formulár automaticky neodošle.
+- [ ] Submit je povolený až po `verified`; jeden token sa použije najviac na jeden request a po 422, 429, 5xx alebo chybe siete sa vyžaduje nový.
+- [ ] DevTools Siteverify odpovede pre päť formulárov vracajú presný hostname a action: `audit_start`, `audit_unlock`, `audit_resend`, `manual_review`, `admin_login`.
+- [ ] Token z iného hostname alebo s inou action je odmietnutý bez vytvorenia auditu, leadu, session alebo admin session.
 - [ ] Localhost, private a metadata adresy sú odmietnuté.
 - [ ] Progress zobrazuje reálne etapy a skončí na výsledku.
+- [ ] Zlyhaný `/process` request nevytvorí unhandled promise; zobrazí varovanie, polling pokračuje a manuálny retry obnoví stránku iba po prijatom requeste.
 - [ ] Stale audit sa idempotentne obnoví.
 - [ ] Hostinger proxy nepreruší audit pred 50-sekundovým aplikačným deadline.
 - [ ] Executive preview zodpovedá evidence.
@@ -32,6 +41,9 @@
 - [ ] Dva súbežné unlock requesty vytvoria iba jeden delivery claim, jeden access token a jeden e-mailový pokus.
 - [ ] Samotné GET otvorenie magic linku e-mail neoverí.
 - [ ] POST potvrdenie odomkne report.
+- [ ] Neplatný audit nespotrebuje magic link; platné POST potvrdenie spotrebuje token a overí lead atómovo.
+- [ ] Zlyhanie scoringu, follow-upu alebo internej notifikácie po potvrdení neodoberie už udelený prístup k reportu.
+- [ ] Dva súbežné resend requesty získajú iba jeden cooldown claim, vytvoria iba jeden access token a vykonajú iba jeden e-mailový pokus.
 - [ ] Celý report je bez access grantu neprístupný.
 - [ ] ROI scenáre zvládnu úplné, čiastočné aj neznáme vstupy.
 - [ ] Kvalifikácia obsahuje presne tri otázky.
@@ -74,6 +86,7 @@
 - [ ] Keyboard-only flow.
 - [ ] Viditeľný focus.
 - [ ] Bez horizontálneho overflow.
+- [ ] Turnstile iframe ani recovery tlačidlo nie sú orezané v hero formulári, modale ani pri 320–390 px šírke.
 - [ ] Reduced motion.
 - [ ] Hlavné kontrasty spĺňajú WCAG AA.
 
@@ -81,3 +94,4 @@
 
 Produkčný soft launch je povolený až po splnení všetkých kritických bodov a po úspešnom spracovaní minimálne 10 interných/staging auditov bez straty leadu alebo nekonečného progressu.
 Produkčné nasadenie nesmie začať, kým Hostinger nemá nakonfigurovaný nový nezávislý `FUNNEL_SESSION_SECRET`; hodnota sa nesmie kopírovať z iného tajomstva.
+QA záznam musí obsahovať presný nasadený commit SHA, hostname, čas buildu a posledných osem znakov verejného Site Key. `NEXT_PUBLIC_TURNSTILE_SITE_KEY` je build-time hodnota; QA sa po zmene kľúča opakuje na novom builde.

@@ -26,22 +26,43 @@ vi.mock('@/components/forms/turnstile-widget', async () => {
   const React = await import('react');
   interface WidgetProps {
     onToken: (token: string | null) => void;
-    onExpired?: () => void;
-    onError?: () => void;
-    onTimeout?: () => void;
+    onStateChange: (state: string) => void;
   }
   return {
     TurnstileWidget: React.forwardRef(function MockTurnstileWidget(
       props: WidgetProps,
-      ref: React.ForwardedRef<{ reset: () => void }>,
+      ref: React.ForwardedRef<{ reset: () => void; recover: () => void }>,
     ) {
-      React.useImperativeHandle(ref, () => ({ reset: mocks.widgetReset }));
+      const { onStateChange, onToken } = props;
+      React.useEffect(() => {
+        onStateChange('widget_rendering');
+      }, [onStateChange]);
+      React.useImperativeHandle(ref, () => ({
+        reset: () => {
+          mocks.widgetReset();
+          onToken(null);
+          onStateChange('widget_rendering');
+        },
+        recover: () => onStateChange('widget_rendering'),
+      }));
       return (
         <div data-testid="turnstile-widget">
-          <button type="button" onClick={() => props.onToken('fresh-client-token')}>complete challenge</button>
-          <button type="button" onClick={props.onExpired}>expire challenge</button>
-          <button type="button" onClick={props.onError}>error challenge</button>
-          <button type="button" onClick={props.onTimeout}>timeout challenge</button>
+          <button type="button" onClick={() => {
+            onToken('fresh-client-token');
+            onStateChange('verified');
+          }}>complete challenge</button>
+          <button type="button" onClick={() => {
+            onToken(null);
+            onStateChange('expired');
+          }}>expire challenge</button>
+          <button type="button" onClick={() => {
+            onToken(null);
+            onStateChange('client_error');
+          }}>error challenge</button>
+          <button type="button" onClick={() => {
+            onToken(null);
+            onStateChange('timed_out');
+          }}>timeout challenge</button>
         </div>
       );
     }),
@@ -114,7 +135,7 @@ describe('one-attempt Turnstile client lifecycle', () => {
 
       fireEvent.submit(auditForm());
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(screen.getByRole('alert').textContent).toContain('viditeľné bezpečnostné overenie');
+      expect(screen.getByRole('alert').textContent).toContain('Počkajte');
     },
   );
 
@@ -173,7 +194,7 @@ describe('one-attempt Turnstile client lifecycle', () => {
     fireEvent.submit(auditForm());
 
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert').textContent).toContain('viditeľné bezpečnostné overenie');
+    expect(screen.getAllByRole('alert').some((node) => node.textContent?.includes('Obnovte'))).toBe(true);
   });
 
   it('renders fallback after between-render-and-submit expiry without losing contact fields', async () => {

@@ -174,7 +174,11 @@ describe('POST /api/audit/[token]/unlock', () => {
 
     expect(response.status).toBe(200);
     expect(mocks.verifyTurnstile).toHaveBeenCalledTimes(1);
-    expect(mocks.verifyTurnstile).toHaveBeenCalledWith(expect.any(Request), FRESH_TOKEN);
+    expect(mocks.verifyTurnstile).toHaveBeenCalledWith(
+      expect.any(Request),
+      FRESH_TOKEN,
+      { expectedHostname: 'dczweb.com', expectedAction: 'audit_unlock' },
+    );
   });
 
   it('rejects honeypot input before session or email work', async () => {

@@ -37,7 +37,10 @@ export async function POST(request: Request, context: { params: Promise<{ token:
     if (!parsed.success) {
       throw new PublicAppError({ code: 'invalid_manual_review', status: 422, publicMessage: 'Skontrolujte povinné údaje formulára.' });
     }
-    if (!(await verifyTurnstile(request, parsed.data.turnstileToken ?? null))) {
+    if (!(await verifyTurnstile(request, parsed.data.turnstileToken ?? null, {
+      expectedHostname: new URL(appUrl()).hostname,
+      expectedAction: 'manual_review',
+    }))) {
       throw new PublicAppError({ code: 'turnstile_failed', status: 422, publicMessage: 'Bezpečnostné overenie zlyhalo.' });
     }
 

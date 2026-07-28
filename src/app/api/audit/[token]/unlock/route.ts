@@ -55,7 +55,10 @@ export async function POST(request: Request, context: { params: Promise<{ token:
           publicMessage: 'Platnosť bezpečnostného overenia vypršala. Dokončite nové overenie a formulár odošlite znova.',
         });
       }
-      if (!(await verifyTurnstile(request, parsed.data.turnstileToken))) {
+      if (!(await verifyTurnstile(request, parsed.data.turnstileToken, {
+        expectedHostname: new URL(appUrl()).hostname,
+        expectedAction: 'audit_unlock',
+      }))) {
         throw new PublicAppError({
           code: 'turnstile_failed',
           status: 422,

@@ -62,6 +62,10 @@ export async function POST(request: Request) {
     const turnstile = await verifyTurnstileDetailed(
       request,
       parsed.data.turnstileToken ?? null,
+      {
+        expectedHostname: new URL(appUrl()).hostname,
+        expectedAction: 'audit_start',
+      },
     );
     if (!turnstile.success) {
       throw new PublicAppError({
@@ -74,7 +78,7 @@ export async function POST(request: Request) {
           siteverifyErrorCodes: turnstile.errorCodes,
           expectedHostname: new URL(appUrl()).hostname.toLowerCase(),
           returnedHostname: turnstile.returnedHostname,
-          expectedAction: null,
+          expectedAction: 'audit_start',
           returnedAction: turnstile.returnedAction,
           failureClassification: turnstile.failureClassification,
         },

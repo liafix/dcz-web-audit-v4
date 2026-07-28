@@ -7,7 +7,14 @@ export type TurnstileFailureClassification =
   | 'siteverify_timeout'
   | 'siteverify_network_error'
   | 'siteverify_invalid_json'
-  | 'siteverify_rejected';
+  | 'siteverify_rejected'
+  | 'siteverify_hostname_mismatch'
+  | 'siteverify_action_mismatch';
+
+export interface TurnstileVerificationOptions {
+  expectedHostname?: string;
+  expectedAction?: string;
+}
 
 export interface TurnstileVerificationResult {
   siteverifyHttpStatus: number | null;
@@ -74,6 +81,7 @@ function isTimeoutFailure(error: unknown): boolean {
 export async function verifyTurnstileDetailed(
   request: Request,
   token: string | null,
+  options: TurnstileVerificationOptions = {},
 ): Promise<TurnstileVerificationResult> {
   const enabled = turnstileEnabled();
   if (!enabled) {
@@ -109,22 +117,33 @@ export async function verifyTurnstileDetailed(
     secret,
     response: token,
     remoteip: requestIp(request),
+    idempotency_key: crypto.randomUUID(),
   });
 
-  let response: Response;
-  try {
-    response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-      method: 'POST',
-      body,
-      cache: 'no-store',
-      signal: AbortSignal.timeout(8_000),
-    });
-  } catch (error) {
+  let response: Response | null = null;
+  let requestFailure: 'siteverify_timeout' | 'siteverify_network_error' | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+        method: 'POST',
+        body,
+        cache: 'no-store',
+        signal: AbortSignal.timeout(4_000),
+      });
+      requestFailure = null;
+      if (response.ok || (response.status !== 429 && response.status < 500)) break;
+    } catch (error) {
+      response = null;
+      requestFailure = isTimeoutFailure(error)
+        ? 'siteverify_timeout'
+        : 'siteverify_network_error';
+    }
+  }
+
+  if (!response) {
     return verificationResult({
       success: false,
-      failureClassification: isTimeoutFailure(error)
-        ? 'siteverify_timeout'
-        : 'siteverify_network_error',
+      failureClassification: requestFailure ?? 'siteverify_network_error',
     });
   }
 
@@ -152,17 +171,33 @@ export async function verifyTurnstileDetailed(
       ? (payload as Record<string, unknown>)
       : null;
   const success = record?.success === true;
+  const returnedHostname = sanitizeHostname(record?.hostname);
+  const returnedAction = sanitizeAction(record?.action);
+  const expectedHostname = options.expectedHostname?.trim().toLowerCase();
+  const expectedAction = options.expectedAction?.trim();
+  const hostnameMatches = !expectedHostname || returnedHostname === expectedHostname;
+  const actionMatches = !expectedAction || returnedAction === expectedAction;
 
   return verificationResult({
     siteverifyHttpStatus: response.status,
-    success,
+    success: success && hostnameMatches && actionMatches,
     errorCodes: sanitizeErrorCodes(record?.['error-codes']),
-    returnedHostname: sanitizeHostname(record?.hostname),
-    returnedAction: sanitizeAction(record?.action),
-    failureClassification: success ? null : 'siteverify_rejected',
+    returnedHostname,
+    returnedAction,
+    failureClassification: !success
+      ? 'siteverify_rejected'
+      : !hostnameMatches
+        ? 'siteverify_hostname_mismatch'
+        : !actionMatches
+          ? 'siteverify_action_mismatch'
+          : null,
   });
 }
 
-export async function verifyTurnstile(request: Request, token: string | null): Promise<boolean> {
-  return (await verifyTurnstileDetailed(request, token)).success;
+export async function verifyTurnstile(
+  request: Request,
+  token: string | null,
+  options: TurnstileVerificationOptions = {},
+): Promise<boolean> {
+  return (await verifyTurnstileDetailed(request, token, options)).success;
 }
