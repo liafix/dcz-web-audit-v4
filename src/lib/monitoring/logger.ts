@@ -1,5 +1,7 @@
 ﻿import 'server-only';
 
+import type { TargetFetchDiagnostic } from '@/lib/errors/target-fetch-error';
+
 export function correlationId(prefix = 'ERR'): string {
   return `${prefix}-${globalThis.crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 }
@@ -45,21 +47,40 @@ export async function logApplicationEvent(input: {
   auditId?: string | null;
   error?: unknown;
   context?: Record<string, unknown>;
+  targetFetch?: TargetFetchDiagnostic & { auditProcessingAttempt?: number };
 }): Promise<void> {
-  const normalized = input.error instanceof Error ? input.error : null;
-  const payload = {
-    level: input.level,
-    event: input.event,
-    errorId: input.errorId,
-    auditId: input.auditId,
-    message: normalized ? sanitizeText(normalized.message) : undefined,
-    name: normalized?.name,
-    stack: normalized?.stack
-      ? sanitizeText(normalized.stack.split('\n').slice(0, 8).join('\n'))
-      : undefined,
-    context: sanitize(input.context ?? {}),
-    timestamp: new Date().toISOString(),
-  };
+  const payload = input.targetFetch
+    ? {
+        level: input.level,
+        event: input.event,
+        errorId: input.errorId,
+        auditId: input.auditId,
+        classification: input.targetFetch.classification,
+        phase: input.targetFetch.phase,
+        safeCauseCode: input.targetFetch.safeCauseCode,
+        retryable: input.targetFetch.retryable,
+        addressFamily: input.targetFetch.addressFamily,
+        addressAttempt: input.targetFetch.addressAttempt,
+        totalAddressAttempts: input.targetFetch.totalAddressAttempts,
+        auditProcessingAttempt: input.targetFetch.auditProcessingAttempt,
+        timestamp: new Date().toISOString(),
+      }
+    : (() => {
+        const normalized = input.error instanceof Error ? input.error : null;
+        return {
+          level: input.level,
+          event: input.event,
+          errorId: input.errorId,
+          auditId: input.auditId,
+          message: normalized ? sanitizeText(normalized.message) : undefined,
+          name: normalized?.name,
+          stack: normalized?.stack
+            ? sanitizeText(normalized.stack.split('\n').slice(0, 8).join('\n'))
+            : undefined,
+          context: sanitize(input.context ?? {}),
+          timestamp: new Date().toISOString(),
+        };
+      })();
 
   const serialized = JSON.stringify(payload);
   if (input.level === 'error') console.error(serialized);

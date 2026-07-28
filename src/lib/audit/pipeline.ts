@@ -7,6 +7,10 @@ import { inspectTechnicalFiles } from '@/lib/audit/technical-files';
 import type { AuditEvidence } from '@/lib/audit/types';
 import { claimAudit, completeAudit, failAudit, findAuditById, updateAuditStage } from '@/lib/db/queries';
 import { safeAuditFailure } from '@/lib/errors/public-error';
+import {
+  TargetFetchError,
+  targetFetchDiagnostic,
+} from '@/lib/errors/target-fetch-error';
 import { correlationId, logApplicationEvent } from '@/lib/monitoring/logger';
 import { safeFetchText } from '@/lib/security/safe-fetch';
 import { upsertBusinessProfile } from '@/lib/db/revenue-queries';
@@ -100,13 +104,26 @@ export async function processAudit(auditId: string): Promise<'completed' | 'alre
   } catch (error) {
     const failure = safeAuditFailure(error);
     const errorId = correlationId('AUD');
-    await logApplicationEvent({
-      level: 'error',
-      event: failure.code,
-      errorId,
-      auditId,
-      error,
-    });
+    if (error instanceof TargetFetchError) {
+      await logApplicationEvent({
+        level: 'error',
+        event: failure.code,
+        errorId,
+        auditId,
+        targetFetch: {
+          ...targetFetchDiagnostic(error),
+          auditProcessingAttempt: audit.attemptCount,
+        },
+      });
+    } else {
+      await logApplicationEvent({
+        level: 'error',
+        event: failure.code,
+        errorId,
+        auditId,
+        error,
+      });
+    }
     await failAudit(auditId, failure.code, failure.publicMessage, errorId);
     await recordFunnelEventSafe({
       auditId,

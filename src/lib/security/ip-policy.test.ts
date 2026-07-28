@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { isPublicIp } from '@/lib/security/ip-policy';
+import { TargetFetchError } from '@/lib/errors/target-fetch-error';
+import { assertPublicIp, isPublicIp } from '@/lib/security/ip-policy';
 
 describe('isPublicIp', () => {
   it.each(['127.0.0.1', '10.0.0.1', '192.168.1.1', '169.254.169.254', '::1', 'fc00::1'])(
@@ -9,5 +10,18 @@ describe('isPublicIp', () => {
 
   it.each(['1.1.1.1', '8.8.8.8', '2606:4700:4700::1111'])('allows %s', (value: string) => {
     expect(isPublicIp(value)).toBe(true);
+  });
+
+  it('rejects private addresses with a typed fail-closed policy error', () => {
+    expect(() => assertPublicIp('169.254.169.254')).toThrowError(TargetFetchError);
+    try {
+      assertPublicIp('169.254.169.254');
+    } catch (error) {
+      expect(error).toMatchObject({
+        classification: 'unsafe_resolved_address',
+        phase: 'policy',
+        retryable: false,
+      });
+    }
   });
 });

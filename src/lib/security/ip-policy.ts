@@ -1,4 +1,5 @@
 import ipaddr from 'ipaddr.js';
+import { TargetFetchError } from '@/lib/errors/target-fetch-error';
 
 const BLOCKED_RANGES = new Set([
   'unspecified',
@@ -28,6 +29,14 @@ export function isPublicIp(address: string): boolean {
 
 export function assertPublicIp(address: string): void {
   if (!isPublicIp(address)) {
-    throw new Error('Cieľ smeruje na nepovolenú alebo súkromnú IP adresu.');
+    throw new TargetFetchError({
+      classification: 'unsafe_resolved_address',
+      phase: 'policy',
+      safeCauseCode: 'unknown',
+      retryable: false,
+      addressFamily: null,
+      addressAttempt: 0,
+      totalAddressAttempts: 0,
+    });
   }
 }
