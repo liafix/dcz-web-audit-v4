@@ -6,15 +6,15 @@ import { Button } from '@/components/ui/button';
 const STATUS_TEXT: Partial<Record<TurnstileLifecycleState, string>> = {
   script_not_requested: 'Pripravujeme bezpečnostné overenie…',
   script_loading: 'Načítavame bezpečnostné overenie…',
+  script_delayed: 'Načítanie bezpečnostného overenia trvá dlhšie. Stále pokračujeme…',
   script_ready: 'Pripravujeme bezpečnostné overenie…',
   widget_rendering: 'Pripravujeme bezpečnostné overenie…',
-  rerendering: 'Obnovujeme bezpečnostné overenie…',
-  resetting: 'Obnovujeme bezpečnostné overenie…',
+  challenge_delayed: 'Bezpečnostné overenie trvá dlhšie. Stále pokračujeme…',
+  retrying: 'Bezpečnostné overenie sa automaticky obnovuje…',
+  refreshing: 'Obnovujeme bezpečnostné overenie…',
   widget_visible: 'Dokončite zobrazené bezpečnostné overenie.',
   verifying: 'Overujeme bezpečnostnú kontrolu…',
   verified: 'Bezpečnostné overenie je pripravené.',
-  expired: 'Platnosť bezpečnostného overenia vypršala.',
-  timed_out: 'Bezpečnostné overenie vypršalo pre nečinnosť.',
   client_error: 'Bezpečnostné overenie sa nepodarilo načítať.',
   unavailable: 'Bezpečnostné overenie momentálne nie je dostupné.',
 };
@@ -26,7 +26,7 @@ export function TurnstileStatus({
   phase: TurnstileLifecycleState;
   onRecover: () => void;
 }) {
-  const recoverable = ['expired', 'timed_out', 'client_error', 'unavailable'].includes(phase);
+  const recoverable = ['client_error', 'unavailable'].includes(phase);
   const successful = phase === 'verified';
   const text = STATUS_TEXT[phase];
   if (!text) return null;

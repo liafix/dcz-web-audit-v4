@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { TurnstileStatus } from '@/components/forms/turnstile-status';
 import { TurnstileWidget } from '@/components/forms/turnstile-widget';
 import { useTurnstileAttempt } from '@/components/forms/use-turnstile-attempt';
@@ -13,10 +13,6 @@ export function ResendAccessForm({ token }: { token: string }) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const turnstile = useTurnstileAttempt();
-
-  useEffect(() => {
-    setEmail(sessionStorage.getItem(`dcz-audit-email:${token}`) ?? '');
-  }, [token]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

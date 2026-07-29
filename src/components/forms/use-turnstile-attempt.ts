@@ -14,8 +14,6 @@ export type TurnstileAttempt =
   | { status: 'recoverable' };
 
 const RECOVERABLE_STATES = new Set<TurnstileLifecycleState>([
-  'expired',
-  'timed_out',
   'client_error',
   'unavailable',
 ]);
@@ -23,10 +21,12 @@ const RECOVERABLE_STATES = new Set<TurnstileLifecycleState>([
 const NOT_READY_STATES = new Set<TurnstileLifecycleState>([
   'script_not_requested',
   'script_loading',
+  'script_delayed',
   'script_ready',
   'widget_rendering',
-  'resetting',
-  'rerendering',
+  'challenge_delayed',
+  'retrying',
+  'refreshing',
   'verifying',
 ]);
 
@@ -35,6 +35,7 @@ export function useTurnstileAttempt() {
   const tokenRef = useRef<string | null>(null);
   const lifecycleRef = useRef<TurnstileLifecycleState>('script_not_requested');
   const lockedRef = useRef(false);
+  const recoveryClaimedRef = useRef(false);
   const [phase, setPhase] = useState<TurnstileLifecycleState>('script_not_requested');
   const [pending, setPending] = useState(false);
 
@@ -44,6 +45,7 @@ export function useTurnstileAttempt() {
 
   const onStateChange = useCallback((value: TurnstileLifecycleState) => {
     lifecycleRef.current = value;
+    if (!RECOVERABLE_STATES.has(value)) recoveryClaimedRef.current = false;
     setPhase(value);
   }, []);
 
@@ -66,14 +68,25 @@ export function useTurnstileAttempt() {
   }, []);
 
   const release = useCallback((resetWidget: boolean) => {
-    if (resetWidget) widgetRef.current?.reset();
+    if (!lockedRef.current) return;
     lockedRef.current = false;
+    if (resetWidget) widgetRef.current?.reset();
     setPending(false);
   }, []);
 
-  const recover = useCallback(() => {
+  const recover = useCallback((options?: { beforeReload?: () => void }) => {
+    if (recoveryClaimedRef.current) return;
+    recoveryClaimedRef.current = true;
     tokenRef.current = null;
-    widgetRef.current?.recover();
+    const result = widgetRef.current?.recover() ?? 'ignored';
+    if (result === 'ignored') {
+      recoveryClaimedRef.current = false;
+      return;
+    }
+    if (result === 'reload_required') {
+      options?.beforeReload?.();
+      window.location.reload();
+    }
   }, []);
 
   return {

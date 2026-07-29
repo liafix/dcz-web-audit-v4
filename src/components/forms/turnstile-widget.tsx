@@ -1,6 +1,5 @@
 'use client';
 
-import Script from 'next/script';
 import {
   forwardRef,
   useCallback,
@@ -13,17 +12,17 @@ import {
 export type TurnstileLifecycleState =
   | 'script_not_requested'
   | 'script_loading'
+  | 'script_delayed'
   | 'script_ready'
   | 'widget_rendering'
+  | 'challenge_delayed'
   | 'widget_visible'
   | 'verifying'
   | 'verified'
-  | 'expired'
-  | 'timed_out'
+  | 'retrying'
+  | 'refreshing'
   | 'client_error'
-  | 'unavailable'
-  | 'resetting'
-  | 'rerendering';
+  | 'unavailable';
 
 interface TurnstileRenderOptions {
   sitekey: string;
@@ -39,12 +38,14 @@ interface TurnstileRenderOptions {
   'response-field': false;
   callback: (token: string) => void;
   'expired-callback': () => void;
-  'error-callback': (code?: string) => void;
+  'error-callback': (code?: string) => boolean;
   'timeout-callback': () => void;
   'before-interactive-callback': () => void;
   'after-interactive-callback': () => void;
   'unsupported-callback': () => void;
 }
+
+type TurnstileBridgeStatus = 'loading' | 'ready' | 'failed';
 
 declare global {
   interface Window {
@@ -53,12 +54,18 @@ declare global {
       remove: (widgetId: string) => void;
       reset: (widgetId: string) => void;
     };
+    __dczTurnstileBridge?: {
+      status: TurnstileBridgeStatus;
+    };
+    __dczTurnstileReady?: () => void;
   }
 }
 
+export type TurnstileRecoveryResult = 'recovered' | 'reload_required' | 'ignored';
+
 export interface TurnstileWidgetHandle {
   reset: () => void;
-  recover: () => void;
+  recover: () => TurnstileRecoveryResult;
 }
 
 interface TurnstileWidgetProps {
@@ -69,10 +76,37 @@ interface TurnstileWidgetProps {
   responsive?: boolean;
 }
 
-const SCRIPT_ID = 'cloudflare-turnstile-script';
-const SCRIPT_URL = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-const SCRIPT_READY_TIMEOUT_MS = 12_000;
-const WIDGET_PRESENCE_TIMEOUT_MS = 1_500;
+const TURNSTILE_READY_EVENT = 'dcz:turnstile-ready';
+const TURNSTILE_ERROR_EVENT = 'dcz:turnstile-error';
+const DELAYED_STATE_MS = 8_000;
+const TERMINAL_STATE_MS = 20_000;
+const MAX_ERROR_CALLBACKS = 3;
+
+const RETRYABLE_ERROR_CODES = new Set(['110600', '110620', '200500']);
+const NON_RETRYABLE_ERROR_CODES = new Set([
+  '110100',
+  '110110',
+  '110200',
+  '200100',
+  '400020',
+  '400070',
+]);
+
+type ErrorDisposition = 'retryable' | 'non_retryable' | 'unknown';
+
+function classifyErrorCode(code?: string): ErrorDisposition {
+  const normalized = code?.trim();
+  if (!normalized || !/^\d{6}$/.test(normalized)) return 'unknown';
+  if (NON_RETRYABLE_ERROR_CODES.has(normalized)) return 'non_retryable';
+  if (
+    RETRYABLE_ERROR_CODES.has(normalized)
+    || normalized.startsWith('300')
+    || normalized.startsWith('600')
+  ) {
+    return 'retryable';
+  }
+  return 'unknown';
+}
 
 export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidgetProps>(
   function TurnstileWidget(
@@ -85,8 +119,16 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidget
     const tokenCallbackRef = useRef(onToken);
     const stateCallbackRef = useRef(onStateChange);
     const mountedRef = useRef(false);
+    const terminalRef = useRef(false);
+    const recoveryClaimedRef = useRef(false);
+    const errorCallbackCountRef = useRef(0);
+    const transientActiveRef = useRef(false);
+    const transientDelayedRef = useRef(false);
+    const scriptDelayedTimerRef = useRef<number | null>(null);
+    const scriptTerminalTimerRef = useRef<number | null>(null);
+    const transientDelayedTimerRef = useRef<number | null>(null);
+    const transientTerminalTimerRef = useRef<number | null>(null);
     const [scriptReady, setScriptReady] = useState(false);
-    const [scriptAttempt, setScriptAttempt] = useState(0);
     const [renderRequest, setRenderRequest] = useState(0);
 
     useEffect(() => {
@@ -105,6 +147,30 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidget
       tokenCallbackRef.current(null);
     }, []);
 
+    const stopScriptTimers = useCallback(() => {
+      if (scriptDelayedTimerRef.current !== null) {
+        window.clearTimeout(scriptDelayedTimerRef.current);
+        scriptDelayedTimerRef.current = null;
+      }
+      if (scriptTerminalTimerRef.current !== null) {
+        window.clearTimeout(scriptTerminalTimerRef.current);
+        scriptTerminalTimerRef.current = null;
+      }
+    }, []);
+
+    const stopTransientTimers = useCallback(() => {
+      if (transientDelayedTimerRef.current !== null) {
+        window.clearTimeout(transientDelayedTimerRef.current);
+        transientDelayedTimerRef.current = null;
+      }
+      if (transientTerminalTimerRef.current !== null) {
+        window.clearTimeout(transientTerminalTimerRef.current);
+        transientTerminalTimerRef.current = null;
+      }
+      transientActiveRef.current = false;
+      transientDelayedRef.current = false;
+    }, []);
+
     const removeOwnedWidget = useCallback((expectedGeneration?: number) => {
       const owned = widgetRef.current;
       if (!owned || (expectedGeneration !== undefined && owned.generation !== expectedGeneration)) {
@@ -116,49 +182,111 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidget
       try {
         window.turnstile?.remove(owned.id);
       } catch {
-        // A stale Cloudflare handle is already detached. The local ownership is cleared first.
+        // The local ownership is already cleared, so a stale vendor handle is harmless.
       }
     }, []);
 
-    const requestRerender = useCallback((state: 'resetting' | 'rerendering') => {
+    const terminalize = useCallback((state: 'client_error' | 'unavailable') => {
+      if (terminalRef.current) return false;
+      terminalRef.current = true;
+      recoveryClaimedRef.current = false;
+      stopScriptTimers();
+      stopTransientTimers();
       clearToken();
       publishState(state);
       removeOwnedWidget();
-      if (window.turnstile) {
-        setScriptReady(true);
-        setRenderRequest((value) => value + 1);
-        return;
-      }
+      return true;
+    }, [
+      clearToken,
+      publishState,
+      removeOwnedWidget,
+      stopScriptTimers,
+      stopTransientTimers,
+    ]);
 
-      setScriptReady(false);
-      setScriptAttempt((value) => value + 1);
+    const startScriptWindow = useCallback(() => {
+      stopScriptTimers();
       publishState('script_loading');
-    }, [clearToken, publishState, removeOwnedWidget]);
+      scriptDelayedTimerRef.current = window.setTimeout(() => {
+        if (!terminalRef.current) publishState('script_delayed');
+      }, DELAYED_STATE_MS);
+      scriptTerminalTimerRef.current = window.setTimeout(() => {
+        terminalize('unavailable');
+      }, TERMINAL_STATE_MS);
+    }, [publishState, stopScriptTimers, terminalize]);
+
+    const ensureTransientWindow = useCallback((state: TurnstileLifecycleState) => {
+      if (terminalRef.current) return;
+      if (!transientActiveRef.current) {
+        transientActiveRef.current = true;
+        transientDelayedRef.current = false;
+        transientDelayedTimerRef.current = window.setTimeout(() => {
+          if (terminalRef.current || !transientActiveRef.current) return;
+          transientDelayedRef.current = true;
+          publishState('challenge_delayed');
+        }, DELAYED_STATE_MS);
+        transientTerminalTimerRef.current = window.setTimeout(() => {
+          terminalize('client_error');
+        }, TERMINAL_STATE_MS);
+      }
+      publishState(transientDelayedRef.current ? 'challenge_delayed' : state);
+    }, [publishState, terminalize]);
+
+    const resetGenerationState = useCallback(() => {
+      stopTransientTimers();
+      errorCallbackCountRef.current = 0;
+      terminalRef.current = false;
+      recoveryClaimedRef.current = false;
+    }, [stopTransientTimers]);
 
     useImperativeHandle(ref, () => ({
       reset() {
+        if (terminalRef.current) return;
         clearToken();
         const owned = widgetRef.current;
         if (!owned || !window.turnstile) {
-          requestRerender('resetting');
+          terminalize('unavailable');
           return;
         }
 
-        publishState('resetting');
+        resetGenerationState();
+        ensureTransientWindow('widget_rendering');
         try {
           window.turnstile.reset(owned.id);
-          publishState('widget_rendering');
         } catch {
-          requestRerender('rerendering');
+          terminalize('client_error');
         }
       },
       recover() {
-        requestRerender('rerendering');
+        if (!terminalRef.current || recoveryClaimedRef.current) return 'ignored';
+        recoveryClaimedRef.current = true;
+        clearToken();
+        if (
+          window.__dczTurnstileBridge?.status !== 'ready'
+          || !window.turnstile
+        ) {
+          publishState('script_loading');
+          return 'reload_required';
+        }
+
+        resetGenerationState();
+        publishState('widget_rendering');
+        setScriptReady(true);
+        setRenderRequest((value) => value + 1);
+        return 'recovered';
       },
-    }), [clearToken, publishState, requestRerender]);
+    }), [
+      clearToken,
+      ensureTransientWindow,
+      publishState,
+      resetGenerationState,
+      terminalize,
+    ]);
 
     useEffect(() => {
       mountedRef.current = true;
+      terminalRef.current = false;
+      recoveryClaimedRef.current = false;
       if (!siteKey) {
         publishState('unavailable');
         return () => {
@@ -166,43 +294,69 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidget
         };
       }
 
-      if (window.turnstile) {
+      const handleReady = () => {
+        if (terminalRef.current) return;
+        stopScriptTimers();
+        if (!window.turnstile) {
+          terminalize('unavailable');
+          return;
+        }
         setScriptReady(true);
         publishState('script_ready');
+      };
+      const handleError = () => {
+        terminalize('unavailable');
+      };
+
+      window.addEventListener(TURNSTILE_READY_EVENT, handleReady);
+      window.addEventListener(TURNSTILE_ERROR_EVENT, handleError);
+
+      if (
+        window.__dczTurnstileBridge?.status === 'ready'
+        || window.turnstile
+      ) {
+        handleReady();
+      } else if (window.__dczTurnstileBridge?.status === 'failed') {
+        handleError();
       } else {
-        publishState('script_loading');
+        startScriptWindow();
       }
 
       return () => {
         mountedRef.current = false;
+        window.removeEventListener(TURNSTILE_READY_EVENT, handleReady);
+        window.removeEventListener(TURNSTILE_ERROR_EVENT, handleError);
+        stopScriptTimers();
+        stopTransientTimers();
         removeOwnedWidget();
       };
-    }, [publishState, removeOwnedWidget, siteKey]);
+    }, [
+      publishState,
+      removeOwnedWidget,
+      siteKey,
+      startScriptWindow,
+      stopScriptTimers,
+      stopTransientTimers,
+      terminalize,
+    ]);
 
     useEffect(() => {
-      if (!siteKey || scriptReady || window.turnstile) return;
-
-      const timeoutId = window.setTimeout(() => {
-        if (!window.turnstile) publishState('unavailable');
-      }, SCRIPT_READY_TIMEOUT_MS);
-      return () => window.clearTimeout(timeoutId);
-    }, [publishState, scriptAttempt, scriptReady, siteKey]);
-
-    useEffect(() => {
-      if (!siteKey || !scriptReady || !containerRef.current) return;
+      if (!siteKey || !scriptReady || !containerRef.current || terminalRef.current) return;
       const turnstile = window.turnstile;
       if (!turnstile) {
-        publishState('unavailable');
+        terminalize('unavailable');
         return;
       }
 
       removeOwnedWidget();
+      resetGenerationState();
       const generation = generationRef.current + 1;
       generationRef.current = generation;
-      publishState(renderRequest > 0 ? 'rerendering' : 'widget_rendering');
+      ensureTransientWindow('widget_rendering');
 
       const isCurrent = () => (
         mountedRef.current
+        && !terminalRef.current
         && widgetRef.current?.generation === generation
       );
 
@@ -228,94 +382,81 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidget
           'response-field': false,
           callback: (token) => {
             if (!isCurrent()) return;
+            stopTransientTimers();
+            errorCallbackCountRef.current = 0;
             tokenCallbackRef.current(token);
             publishState('verified');
           },
           'expired-callback': () => {
             if (!isCurrent()) return;
             clearToken();
-            publishState('expired');
+            ensureTransientWindow('refreshing');
           },
-          'error-callback': () => {
-            if (!isCurrent()) return;
+          'error-callback': (code) => {
+            if (!isCurrent() || terminalRef.current) return true;
             clearToken();
-            publishState('client_error');
+            if (classifyErrorCode(code) === 'non_retryable') {
+              terminalize('client_error');
+              return true;
+            }
+
+            errorCallbackCountRef.current += 1;
+            if (errorCallbackCountRef.current >= MAX_ERROR_CALLBACKS) {
+              terminalize('client_error');
+              return true;
+            }
+            ensureTransientWindow('retrying');
+            return false;
           },
           'timeout-callback': () => {
             if (!isCurrent()) return;
             clearToken();
-            publishState('timed_out');
+            ensureTransientWindow('refreshing');
           },
           'before-interactive-callback': () => {
-            if (isCurrent()) publishState('widget_visible');
+            if (!isCurrent()) return;
+            stopTransientTimers();
+            publishState('widget_visible');
           },
           'after-interactive-callback': () => {
-            if (isCurrent()) publishState('verifying');
+            if (isCurrent()) ensureTransientWindow('verifying');
           },
           'unsupported-callback': () => {
-            if (!isCurrent()) return;
-            clearToken();
-            publishState('unavailable');
+            if (isCurrent()) terminalize('unavailable');
           },
         });
         widgetRef.current = { id, generation };
 
-        const presenceTimeout = window.setTimeout(() => {
-          if (!isCurrent() || containerRef.current?.querySelector('iframe')) return;
-          clearToken();
-          publishState('client_error');
-        }, WIDGET_PRESENCE_TIMEOUT_MS);
-
         return () => {
-          window.clearTimeout(presenceTimeout);
+          stopTransientTimers();
           removeOwnedWidget(generation);
         };
       } catch {
-        if (generationRef.current === generation) {
-          clearToken();
-          publishState('client_error');
-        }
+        terminalize('client_error');
       }
     }, [
       action,
       clearToken,
+      ensureTransientWindow,
       publishState,
       removeOwnedWidget,
       renderRequest,
+      resetGenerationState,
       responsive,
       scriptReady,
       siteKey,
+      stopTransientTimers,
+      terminalize,
     ]);
 
     if (!siteKey) return null;
 
     return (
-      <>
-        <Script
-          key={scriptAttempt}
-          id={scriptAttempt === 0 ? SCRIPT_ID : `${SCRIPT_ID}-${scriptAttempt}`}
-          src={scriptAttempt === 0 ? SCRIPT_URL : `${SCRIPT_URL}&retry=${scriptAttempt}`}
-          strategy="afterInteractive"
-          onReady={() => {
-            if (!window.turnstile) {
-              publishState('unavailable');
-              return;
-            }
-            setScriptReady(true);
-            publishState('script_ready');
-          }}
-          onError={() => {
-            setScriptReady(false);
-            clearToken();
-            publishState('unavailable');
-          }}
-        />
-        <div
-          ref={containerRef}
-          className={responsive ? 'turnstile-slot' : 'min-h-16'}
-          aria-label="Bezpečnostné overenie"
-        />
-      </>
+      <div
+        ref={containerRef}
+        className={responsive ? 'turnstile-slot' : 'min-h-16'}
+        aria-label="Bezpečnostné overenie"
+      />
     );
   },
 );

@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { TurnstileStatus } from '@/components/forms/turnstile-status';
 import { TurnstileWidget } from '@/components/forms/turnstile-widget';
 import { useTurnstileAttempt } from '@/components/forms/use-turnstile-attempt';
@@ -9,6 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 interface StartResponse { token?: string; error?: string; errorId?: string; }
+
+export const AUDIT_URL_RECOVERY_KEY = 'dcz:audit-url-recovery:v1';
+const MAX_RECOVERY_URL_LENGTH = 2_048;
 
 export function AuditForm({
   compact = false,
@@ -22,9 +25,38 @@ export function AuditForm({
   const [website, setWebsite] = useState('');
   const [error, setError] = useState<string | null>(null);
   const turnstile = useTurnstileAttempt();
+  const recoverTurnstileAttempt = turnstile.recover;
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
   const isHero = variant === 'hero';
   const isCompact = compact || isHero;
+
+  useEffect(() => {
+    try {
+      const recoveredUrl = window.sessionStorage.getItem(AUDIT_URL_RECOVERY_KEY);
+      window.sessionStorage.removeItem(AUDIT_URL_RECOVERY_KEY);
+      if (recoveredUrl && recoveredUrl.length <= MAX_RECOVERY_URL_LENGTH) {
+        setUrl((current) => current || recoveredUrl);
+      }
+    } catch {
+      // Storage can be unavailable in privacy-restricted browsers.
+    }
+  }, []);
+
+  const persistAuditUrlForRecovery = useCallback(() => {
+    try {
+      window.sessionStorage.removeItem(AUDIT_URL_RECOVERY_KEY);
+      const recoveryUrl = url.trim();
+      if (recoveryUrl && recoveryUrl.length <= MAX_RECOVERY_URL_LENGTH) {
+        window.sessionStorage.setItem(AUDIT_URL_RECOVERY_KEY, recoveryUrl);
+      }
+    } catch {
+      // Recovery still proceeds without persistence when storage is unavailable.
+    }
+  }, [url]);
+
+  const recoverTurnstile = useCallback(() => {
+    recoverTurnstileAttempt({ beforeReload: persistAuditUrlForRecovery });
+  }, [persistAuditUrlForRecovery, recoverTurnstileAttempt]);
 
   function currentReferrerHost(): string | null {
     try { return document.referrer ? new URL(document.referrer).hostname : null; } catch { return null; }
@@ -87,7 +119,7 @@ export function AuditForm({
       onStateChange={turnstile.onStateChange}
       responsive={isHero}
     />
-    {siteKey && <TurnstileStatus phase={turnstile.phase} onRecover={turnstile.recover} />}
+    {siteKey && <TurnstileStatus phase={turnstile.phase} onRecover={recoverTurnstile} />}
     <p id="audit-help" className={isHero ? 'premium-audit-form__help' : 'text-xs leading-5 text-slate-500'}>Kontrolujeme iba verejne dostupné signály titulnej stránky. Neprihlasujeme sa, neodosielame formuláre ani nevykonávame zásahy do webu.</p>
     {error && <p id="audit-error" role="alert" className="rounded-xl border border-red-400/25 bg-red-400/8 px-4 py-3 text-sm text-red-200">{error}</p>}
   </form>;

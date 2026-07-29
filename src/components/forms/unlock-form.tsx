@@ -60,8 +60,6 @@ export function UnlockForm({ token, funnelVerified = false }: { token: string; f
         return;
       }
       if (!response.ok || !data.checkEmailUrl) throw new Error(`${data.error ?? 'E-mail sa nepodarilo odoslať.'}${data.errorId ? ` ID: ${data.errorId}` : ''}`);
-      const email = String(form.get('email') ?? '');
-      sessionStorage.setItem(`dcz-audit-email:${token}`, email);
       router.push(data.checkEmailUrl);
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'E-mail sa nepodarilo odoslať.');

@@ -3,7 +3,10 @@
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AuditForm } from '@/components/forms/audit-form';
+import {
+  AUDIT_URL_RECOVERY_KEY,
+  AuditForm,
+} from '@/components/forms/audit-form';
 import { UnlockForm } from '@/components/forms/unlock-form';
 
 const mocks = vi.hoisted(() => ({
@@ -11,7 +14,9 @@ const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
   refresh: vi.fn(),
   widgetReset: vi.fn(),
+  widgetRecover: vi.fn(),
   requestFetch: vi.fn(),
+  recoveryResult: 'recovered' as 'recovered' | 'reload_required',
 }));
 
 vi.mock('next/navigation', () => ({
@@ -31,7 +36,10 @@ vi.mock('@/components/forms/turnstile-widget', async () => {
   return {
     TurnstileWidget: React.forwardRef(function MockTurnstileWidget(
       props: WidgetProps,
-      ref: React.ForwardedRef<{ reset: () => void; recover: () => void }>,
+      ref: React.ForwardedRef<{
+        reset: () => void;
+        recover: () => 'recovered' | 'reload_required';
+      }>,
     ) {
       const { onStateChange, onToken } = props;
       React.useEffect(() => {
@@ -43,7 +51,15 @@ vi.mock('@/components/forms/turnstile-widget', async () => {
           onToken(null);
           onStateChange('widget_rendering');
         },
-        recover: () => onStateChange('widget_rendering'),
+        recover: () => {
+          mocks.widgetRecover();
+          if (mocks.recoveryResult === 'recovered') {
+            onStateChange('widget_rendering');
+          } else {
+            onStateChange('script_loading');
+          }
+          return mocks.recoveryResult;
+        },
       }));
       return (
         <div data-testid="turnstile-widget">
@@ -53,7 +69,7 @@ vi.mock('@/components/forms/turnstile-widget', async () => {
           }}>complete challenge</button>
           <button type="button" onClick={() => {
             onToken(null);
-            onStateChange('expired');
+            onStateChange('refreshing');
           }}>expire challenge</button>
           <button type="button" onClick={() => {
             onToken(null);
@@ -61,8 +77,12 @@ vi.mock('@/components/forms/turnstile-widget', async () => {
           }}>error challenge</button>
           <button type="button" onClick={() => {
             onToken(null);
-            onStateChange('timed_out');
+            onStateChange('refreshing');
           }}>timeout challenge</button>
+          <button type="button" onClick={() => {
+            onToken(null);
+            onStateChange('retrying');
+          }}>retry challenge</button>
         </div>
       );
     }),
@@ -87,6 +107,8 @@ async function resolveDeferred(
 describe('one-attempt Turnstile client lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.recoveryResult = 'recovered';
+    window.sessionStorage.clear();
     vi.stubEnv('NEXT_PUBLIC_TURNSTILE_SITE_KEY', 'test-site-key');
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       if (input === '/api/events/landing') {
@@ -101,8 +123,10 @@ describe('one-attempt Turnstile client lifecycle', () => {
 
   afterEach(() => {
     cleanup();
+    window.sessionStorage.clear();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
 
   it.each([422, 429, 500])(
@@ -179,10 +203,10 @@ describe('one-attempt Turnstile client lifecycle', () => {
   });
 
   it.each([
-    ['expire challenge', 'vypršala'],
-    ['error challenge', 'nepodarilo načítať'],
-    ['timeout challenge', 'nečinnosť'],
-  ])('handles the %s callback and requires a new token', (callback, message) => {
+    ['expire challenge', 'Obnovujeme'],
+    ['timeout challenge', 'Obnovujeme'],
+    ['retry challenge', 'automaticky'],
+  ])('keeps %s transient and does not expose competing recovery', (callback, message) => {
     const fetchMock = mocks.requestFetch;
     render(<AuditForm />);
     fireEvent.change(screen.getByLabelText('URL webstránky'), {
@@ -190,11 +214,48 @@ describe('one-attempt Turnstile client lifecycle', () => {
     });
     fireEvent.click(screen.getByText('complete challenge'));
     fireEvent.click(screen.getByText(callback));
-    expect(screen.getByRole('alert').textContent).toContain(message);
+    expect(screen.getByRole('status').textContent).toContain(message);
+    expect(screen.queryByText('Obnoviť overenie')).toBeNull();
     fireEvent.submit(auditForm());
 
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getAllByRole('alert').some((node) => node.textContent?.includes('Obnovte'))).toBe(true);
+    expect(screen.getByRole('alert').textContent).toContain('Počkajte');
+  });
+
+  it('exposes one recovery action only for a terminal state', () => {
+    render(<AuditForm />);
+    fireEvent.click(screen.getByText('error challenge'));
+    expect(screen.getByRole('alert').textContent).toContain('nepodarilo načítať');
+
+    fireEvent.click(screen.getByText('Obnoviť overenie'));
+    expect(mocks.widgetRecover).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Obnoviť overenie')).toBeNull();
+  });
+
+  it('restores a one-use audited URL without persisting the Turnstile token', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mocks.recoveryResult = 'reload_required';
+    const view = render(<AuditForm />);
+    fireEvent.change(screen.getByLabelText('URL webstránky'), {
+      target: { value: 'https://example.test/path?campaign=one' },
+    });
+    fireEvent.click(screen.getByText('complete challenge'));
+    fireEvent.click(screen.getByText('error challenge'));
+    fireEvent.click(screen.getByText('Obnoviť overenie'));
+
+    expect(mocks.widgetRecover).toHaveBeenCalledTimes(1);
+    expect(window.sessionStorage.getItem(AUDIT_URL_RECOVERY_KEY)).toBe(
+      'https://example.test/path?campaign=one',
+    );
+    expect(JSON.stringify(window.sessionStorage)).not.toContain('fresh-client-token');
+
+    view.unmount();
+    render(<AuditForm />);
+    await waitFor(() => {
+      expect((screen.getByLabelText('URL webstránky') as HTMLInputElement).value)
+        .toBe('https://example.test/path?campaign=one');
+    });
+    expect(window.sessionStorage.getItem(AUDIT_URL_RECOVERY_KEY)).toBeNull();
   });
 
   it('renders fallback after between-render-and-submit expiry without losing contact fields', async () => {
