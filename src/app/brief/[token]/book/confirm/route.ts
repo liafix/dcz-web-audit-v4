@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { recordFunnelEventSafe, recordSecurityEventSafe } from '@/lib/analytics/funnel';
 import { createBookingIntent, findOpportunityBriefByHash } from '@/lib/db/revenue-queries';
+import { appUrl } from '@/lib/env';
 import { recalculateAndRouteLead } from '@/lib/leads/routing';
 import { PublicAppError } from '@/lib/errors/public-error';
 import { enforceRateLimit } from '@/lib/rate-limit/server-rate-limit';
@@ -45,7 +46,7 @@ export async function POST(request: Request, context: { params: Promise<{ token:
     await recalculateAndRouteLead(record.leadId);
     return NextResponse.redirect(bookingUrl, { status: 303 });
   } catch (error) {
-    const fallback = new URL('/contact?booking=unavailable', request.url);
+    const fallback = new URL('/contact?booking=unavailable', appUrl());
     if (error instanceof PublicAppError) fallback.searchParams.set('reason', error.code);
     return NextResponse.redirect(fallback, { status: 303 });
   }

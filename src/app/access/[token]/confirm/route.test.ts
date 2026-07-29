@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { NextResponse } from 'next/server';
 
 const mocks = vi.hoisted(() => ({
   assertSameOrigin: vi.fn(),
@@ -108,6 +109,79 @@ describe('POST /access/[token]/confirm email semantics', () => {
       idempotencyKey: `verified-lead-${LEAD_ID}`,
     }));
     expect(mocks.markLeadNotificationSent).toHaveBeenCalledWith(LEAD_ID);
+  });
+
+  it('uses the canonical origin when the request URL contains the internal proxy origin', async () => {
+    const redirectSpy = vi.spyOn(NextResponse, 'redirect');
+    const request = new Request('http://0.0.0.0:3000/access/plain-token/confirm', {
+      method: 'POST',
+      headers: { origin: 'https://dczweb.com' },
+    });
+
+    const response = await POST(request, { params: Promise.resolve({ token: 'plain-token' }) });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get('location')).toBe(
+      'https://dczweb.com/audit/audit_public-token/full?verified=1',
+    );
+    expect(response.headers.get('location')).not.toMatch(
+      /0\.0\.0\.0|localhost|127\.0\.0\.1|hostingersite\.com/i,
+    );
+    expect(mocks.grantReportAccess).toHaveBeenCalledBefore(redirectSpy);
+  });
+
+  it('redirects an invalid or expired token to the canonical invalid-access page', async () => {
+    mocks.peekReportAccessToken.mockResolvedValueOnce(null);
+    const request = new Request('http://0.0.0.0:3000/access/expired-token/confirm', {
+      method: 'POST',
+      headers: { origin: 'https://dczweb.com' },
+    });
+
+    const response = await POST(request, {
+      params: Promise.resolve({ token: 'expired-token' }),
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get('location')).toBe(
+      'https://dczweb.com/audit/start?access=invalid',
+    );
+    expect(mocks.confirmReportAccessAndVerifyLead).not.toHaveBeenCalled();
+    expect(mocks.grantReportAccess).not.toHaveBeenCalled();
+  });
+
+  it('keeps confirmation atomic and grants report access only once', async () => {
+    mocks.confirmReportAccessAndVerifyLead
+      .mockResolvedValueOnce({
+        auditId: AUDIT_ID,
+        email: 'owner@example.test',
+        leadId: LEAD_ID,
+      })
+      .mockResolvedValueOnce(null);
+
+    const firstResponse = await POST(
+      new Request('http://0.0.0.0:3000/access/plain-token/confirm', {
+        method: 'POST',
+        headers: { origin: 'https://dczweb.com' },
+      }),
+      { params: Promise.resolve({ token: 'plain-token' }) },
+    );
+    const secondResponse = await POST(
+      new Request('http://0.0.0.0:3000/access/plain-token/confirm', {
+        method: 'POST',
+        headers: { origin: 'https://dczweb.com' },
+      }),
+      { params: Promise.resolve({ token: 'plain-token' }) },
+    );
+
+    expect(firstResponse.headers.get('location')).toBe(
+      'https://dczweb.com/audit/audit_public-token/full?verified=1',
+    );
+    expect(secondResponse.status).toBe(303);
+    expect(secondResponse.headers.get('location')).toBe(
+      'https://dczweb.com/audit/start?access=invalid',
+    );
+    expect(mocks.confirmReportAccessAndVerifyLead).toHaveBeenCalledTimes(2);
+    expect(mocks.grantReportAccess).toHaveBeenCalledTimes(1);
   });
 
   it('keeps confirmed report access when post-confirm routing fails', async () => {

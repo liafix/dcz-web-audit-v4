@@ -79,10 +79,20 @@ export async function POST(request: Request, context: { params: Promise<{ token:
       });
     }
 
-    return NextResponse.redirect(new URL(`/audit/${encodeURIComponent(audit.publicToken)}/full?verified=1`, request.url), { status: 303 });
+    const resultUrl = new URL(
+      `/audit/${encodeURIComponent(audit.publicToken)}/full`,
+      appUrl(),
+    );
+    resultUrl.searchParams.set('verified', '1');
+    return NextResponse.redirect(resultUrl, { status: 303 });
   } catch (error) {
     const response = jsonError(error, { code: 'access_confirm_failed', status: 500, message: 'Výsledok sa nepodarilo odomknúť.', context: { route: 'access_confirm' } });
-    if (response.status >= 400) return NextResponse.redirect(new URL('/audit/start?access=invalid', request.url), { status: 303 });
+    if (response.status >= 400) {
+      return NextResponse.redirect(
+        new URL('/audit/start?access=invalid', appUrl()),
+        { status: 303 },
+      );
+    }
     return response;
   }
 }
